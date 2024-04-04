@@ -25,69 +25,47 @@ class Entry(models.Model):
         """Creates a index for the dat gz file of UniProt"""
         print(f"Creating index for {DAT_FILE}")
         assert CURRENT_RELEASE_FILE.exists(), f"Cannot access {CURRENT_RELEASE_FILE}"
-        updated = False
-        if INDEX_RELEASE_FILE.exists() and INDEX_FILE.exists():
+        if INDEX_RELEASE_FILE.exists() and INDEX_FILE.exists() and not overwrite:
             if INDEX_RELEASE_FILE.read_text() == CURRENT_RELEASE_FILE.read_text():
-                updated = True
-        if updated and not overwrite:
-            print("Updated index file already exists")
+                print("Updated index file already exists")
         else:
             assert DAT_FILE.exists(), f"Cannot access {DAT_FILE}"
             command = (
                 f"""zgrep -b -A1 '^ID' {DAT_FILE} | sed 's/:ID .*/:/' | sed '/^--/d' |"""
-                f"""sed 's/^.*-AC\s*/ /' | awk '/:$/ {{ printf("%s", $0); next }}1' |tr -d " " |"""
+                f"""sed 's/^.*-AC\\s*/ /' | awk '/:$/ {{ printf("%s", $0); next }}1' |tr -d " " |"""
                 f"""tr  ";" ":" | sed 's/:$//' > {INDEX_FILE}""")
-            print(f"Creating index file {INDEX_FILE}")
             subprocess.call(command, shell=True)
             shutil.copyfile(CURRENT_RELEASE_FILE, INDEX_RELEASE_FILE)
             print("Index created")
 
     @classmethod
-    def update_objects_swissprot(cls):
+    def create_and_update_all(cls):
         """Add new UniProt entries"""
-        with open(files.SWISSPROT_INDEX, 'r') as ids_file:
+        with open(INDEX_FILE, 'r') as ids_file:
             uniprot_ids = set([line.split(":")[1].strip() for line in ids_file])
         # sanity check
-        if len(uniprot_ids) < 550000:
-            print("Could not read SwissProt file properly. Number of uniprot ids read: {}".format(len(uniprot_ids)))
-            raise
-
+        assert len(uniprot_ids) > 550000, f"index file only contains{len(uniprot_ids)} ids"
         # removing obsolete
-        existing = set(Sequence.objects.reviewed().values_list("uniprot_id", flat=True))
-        for obsolete_id in existing - uniprot_ids:
-            obsolete = Sequence.objects.get(uniprot_id=obsolete_id)
-            print("obsolete ",  obsolete)
-            if not common.models.Pdb.objects.filter(structure__sequences=obsolete) and not obsolete.residue_set.all() \
-                    and not obsolete.protein_set.all() and not obsolete.residue_sequences.filter(is_reference=True):
-                # obsolete.residue_sequences.filter(is_reference=False).delete()
-                # print("Deleting obsolete accession id: {}. {}".format(obsolete_id, obsolete.delete()))
-                pass
+        existing = set(Entry.objects.all().values_list("ac", flat=True))
+        obsolete = existing - uniprot_ids
+        if obsolete:
+            if input("Found {len(obsolete)} ids. Delete? (y/n") != "y":
+                return
             else:
-                print("Obsolete Uniprot ID used as reference: ", obsolete_id)
-
-        # promoting trembl entries to swissprot
-        promote = cls.objects.filter(uniprot_id__in=uniprot_ids, in_swissprot=False)
-        print("Promoting {} entries to swissprot".format(promote.count()))
-        promote.update(in_swissprot=True)
-        cls.create_or_update_sequences_batch(uniprot_ids, in_swissprot=True)
+                print(Entry.objects.filter(ac__in=obsolete).delete())
+        print(f"Adding or updating {len(uniprot_ids)} UniProt entries")
+        cls.create_and_update_list(uniprot_ids)
 
     @classmethod
-    def create_or_update_sequences_batch(cls, uniprot_ids, in_swissprot: bool, create_only=False):
+    def create_and_update_list(cls, uniprot_ids, in_swissprot=True):
         """Adds the uniprot_ids in the list to the database or updates existing ones
 
-        :param uniprot_ids: a container of uniprot_ids strings
-        :param in_swissprot: if these sequences belong to swissprot or trembl
-
+        :param uniprot_ids: a container of uniprot accession numbers
+        # :param in_swissprot: if these sequences belong to swissprot or trembl
         """
-        print("Told to add/update {} sequences".format(len(uniprot_ids)))
-        if create_only:
-            uniprot_ids = cls.check_for_new_sequences(uniprot_ids)
-            print("Adding sequences not on M-CSA yet: {}".format(len(uniprot_ids)))
-        index = files.SWISSPROT_INDEX if in_swissprot else files.TREMBL_INDEX
-        data = files.SWISSPROT_DAT_GZ if in_swissprot else files.TREMBL_DAT_GZ
-        records = cls.read_sequence_records(list(uniprot_ids), index, data)
+        records = cls.read_sequence_records(list(uniprot_ids), INDEX_FILE, DAT_FILE)
         new_sequences = cls.create_and_update_sequences_from_records(records, in_swissprot=in_swissprot)
-        print("{} sequences added to database".format(len(new_sequences)))
+        print(f"{len(new_sequences)} sequences added to database")
         return new_sequences
 
     @classmethod
@@ -120,14 +98,14 @@ class Entry(models.Model):
         return SeqIO.parse(io.StringIO(b''.join(data).decode("utf-8")), "swiss")
 
     @classmethod
-    def check_for_new_sequences(cls, uniprot_ids) -> set:
+    def find_new_sequences(cls, uniprot_ids) -> set:
         """
-        Returns a set of the uniprot_ids that are not on the database yet
+        Return a set of uniprot ids that are not on the database yet
 
-        :param uniprot_ids: container of the uniprot_ids to be tested
-        :return: a set of the uniprot_ids that are not on the database yet
+        :param uniprot_ids: container of accession numbers to be tested
+        :return: a set of the accession numbers that are not on the database yet
         """
-        return set(uniprot_ids) - set(cls.objects.values_list("uniprot_id", flat=True))
+        return set(uniprot_ids) - set(cls.objects.values_list("ac", flat=True))
 
     @classmethod
     def create_and_update_sequences_from_records(cls, records, in_swissprot: bool):
