@@ -6,7 +6,7 @@ def run():
 
     # update uniprot index file
     ## create index
-    Entry.create_dat_gz_index()
+    Entry.create_index()
     
     # Add and update entries
     Entry.create_and_update_all()
