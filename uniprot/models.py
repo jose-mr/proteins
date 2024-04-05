@@ -77,6 +77,7 @@ class Entry(models.Model):
         :param uniprot_ids: a container of uniprot accession numbers
         # :param in_swissprot: if these sequences belong to swissprot or trembl
         """
+        # TODO divide in batches to use less ram
         records = cls.read_sequence_records(list(uniprot_ids), INDEX_FILE, DAT_FILE)
         new_sequences = cls.create_and_update_from_records(records)
         print(f"{len(new_sequences)} sequences added to database")
@@ -141,7 +142,6 @@ class Entry(models.Model):
 
         existing = {entry.ac: entry for entry in cls.objects.all()}
 
-        print(len(connection.queries))
         for record in records:
             name = record.description
             name = name[name.find("Full=")+5:]
@@ -172,9 +172,9 @@ class Entry(models.Model):
                     seq=seq,
                     taxid=taxid,
                     comment=comment,
-                    secondary_ac=secondary_ac
+                    secondary_ac=secondary_ac,
+                    keywords=keywords
                 ))
-        print(len(connection.queries))
         return cls.objects.bulk_create(to_create, batch_size=1000)
 
     @classmethod
