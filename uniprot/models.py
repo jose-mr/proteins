@@ -77,12 +77,18 @@ class Entry(models.Model):
         :param uniprot_ids: a container of uniprot accession numbers
         # :param in_swissprot: if these sequences belong to swissprot or trembl
         """
-        # TODO divide in batches to use less ram
-        records = cls.read_sequence_records(list(uniprot_ids), INDEX_FILE, DAT_FILE)
-        new_sequences = cls.create_and_update_from_records(records)
-        print(f"{len(new_sequences)} sequences added to database")
+        # list divided in chunks to use less ram
+        uniprot_ids = list(uniprot_ids)
+        sublist_len = 100000
+        new_sequences = []
+        for i in range(0, len(uniprot_ids), sublist_len):
+            print(i)
+            sublist = uniprot_ids[i:i+sublist_len]
+            records = cls.read_sequence_records(sublist, INDEX_FILE, DAT_FILE)
+            new_sequences.extend(cls.create_and_update_from_records(records))
+            print(f"{len(new_sequences)} sequences added to database")
         return new_sequences
-
+ 
     @classmethod
     def read_sequence_records(cls, uniprot_ids, index_file, dat):
         """
@@ -156,14 +162,14 @@ class Entry(models.Model):
 
             if record.id in existing:
                 current_record = existing[record.id]
-                needs_update = False
+                needs_update = []
                 for field in fields_to_check:
                     new_value = eval(field)
                     if getattr(current_record, field) != new_value:
                         setattr(current_record, field, new_value)
-                        needs_update = True
+                        needs_update.append(field)
                 if needs_update:
-                    print("updating ", current_record)
+                    print("updating ", current_record, needs_update)
                     current_record.save()
             else:
                 to_create.append(cls(
