@@ -1,7 +1,4 @@
-import io
 import gzip
-import subprocess
-import shutil
 
 from Bio import SeqIO
 
@@ -29,179 +26,65 @@ class Entry(models.Model):
     taxid = models.IntegerField(
             verbose_name="NCBI TaxId"
     )
-    keywords = models.JSONField(
-            default=list
-    )
+    keywords = models.ManyToManyField("Keyword", related_name="entries")
     seq = models.TextField()
 
-    @classmethod
-    def create_index(cls, overwrite=False):
-        """Creates a index for the dat gz file of UniProt"""
-        print(f"Creating index for {DAT_FILE}")
-        assert CURRENT_RELEASE_FILE.exists(), f"Cannot access {CURRENT_RELEASE_FILE}"
-        if INDEX_RELEASE_FILE.exists() and INDEX_FILE.exists() and not overwrite:
-            if INDEX_RELEASE_FILE.read_text() == CURRENT_RELEASE_FILE.read_text():
-                print("Updated index file already exists")
-        else:
-            assert DAT_FILE.exists(), f"Cannot access {DAT_FILE}"
-            command = (
-                f"""zgrep -b -A1 '^ID' {DAT_FILE} | sed 's/:ID .*/:/' | sed '/^--/d' |"""
-                f"""sed 's/^.*-AC\\s*/ /' | awk '/:$/ {{ printf("%s", $0); next }}1' |tr -d " " |"""
-                f"""tr  ";" ":" | sed 's/:$//' > {INDEX_FILE}""")
-            subprocess.call(command, shell=True)
-            shutil.copyfile(CURRENT_RELEASE_FILE, INDEX_RELEASE_FILE)
-            print("Index created")
 
     @classmethod
-    def create_and_update_all(cls):
-        """Add new UniProt entries"""
-        with open(INDEX_FILE, 'r') as ids_file:
-            uniprot_ids = set([line.split(":")[1].strip() for line in ids_file])
-        # sanity check
-        assert len(uniprot_ids) > 550000, f"index file only contains{len(uniprot_ids)} ids"
-        # removing obsolete
-        existing = set(Entry.objects.all().values_list("ac", flat=True))
-        obsolete = existing - uniprot_ids
-        if obsolete:
-            if input("Found {len(obsolete)} ids. Delete? (y/n") != "y":
-                return
-            else:
-                print(Entry.objects.filter(ac__in=obsolete).delete())
-        print(f"Adding or updating {len(uniprot_ids)} UniProt entries")
-        cls.create_and_update_list(uniprot_ids)
+    def create_from_dat_file(cls):
+        """Create all UniProt entries from a uniprot dat_gz file"""
+        batch_size = 100000
+        with gzip.open(DAT_FILE, "rb") as dat_file:
+            records = []
+            for record in SeqIO.parse(dat_file, "swiss"):
+                records.append(record)
+                if len(records) == batch_size:
+                    cls.create_from_records(records)
+                    records = []
+            cls.create_from_records(records)
 
     @classmethod
-    def create_and_update_list(cls, uniprot_ids):
-        """Adds the uniprot_ids in the list to the database or updates existing ones
-
-        :param uniprot_ids: a container of uniprot accession numbers
-        # :param in_swissprot: if these sequences belong to swissprot or trembl
-        """
-        # list divided in chunks to use less ram
-        uniprot_ids = list(uniprot_ids)
-        sublist_len = 100000
-        new_sequences = []
-        for i in range(0, len(uniprot_ids), sublist_len):
-            print(i)
-            sublist = uniprot_ids[i:i+sublist_len]
-            records = cls.read_sequence_records(sublist, INDEX_FILE, DAT_FILE)
-            new_sequences.extend(cls.create_and_update_from_records(records))
-            print(f"{len(new_sequences)} sequences added to database")
-        return new_sequences
- 
-    @classmethod
-    def read_sequence_records(cls, uniprot_ids, index_file, dat):
-        """
-        Reads a list of Uniprot ids and returns Bio Seq records
-
-        :param uniprot_ids: the input container with the uniprot ids
-        :param index_file: the index file to use
-        :param dat: the data file to use
-        :return: Bio Seq records
-        """
-        print("Reading Index")
-        index = cls.read_index(index_file, uniprot_ids)
-        print("Index Read")
-        to_read_tuples = []
-        for uniprot_id in uniprot_ids:
-            if uniprot_id in index:
-                to_read_tuples.append(index[uniprot_id])
-        print(f"{len(to_read_tuples)} sequences found in index")
-        to_read_tuples = sorted(to_read_tuples, key=lambda tup: tup[0])
-        with gzip.open(dat, 'rb') as dat_file:
-            previous_end = 0
-            data = []
-            for no, pair in enumerate(to_read_tuples):
-                jump = pair[0]-previous_end
-                dat_file.seek(jump, 1)
-                data.append(dat_file.read(pair[1]))
-                previous_end = sum(pair)
-        return SeqIO.parse(io.StringIO(b''.join(data).decode("utf-8")), "swiss")
-
-    @classmethod
-    def find_new_sequences(cls, uniprot_ids) -> set:
-        """
-        Return a set of uniprot ids that are not on the database yet
-
-        :param uniprot_ids: container of accession numbers to be tested
-        :return: a set of the accession numbers that are not on the database yet
-        """
-        return set(uniprot_ids) - set(cls.objects.values_list("ac", flat=True))
-
-    @classmethod
-    def create_and_update_from_records(cls, records):
-        """
-        Creates and updates sequence objects from the record objects
-        :param records: Bio Seq record with several sequences
-        :param in_swissprot: if the sequences are in swissprot
-        :return: the Sequence objects that were added to the database
-        """
+    def create_from_records(cls, records):
+        "create UniProt objects biopython record objects"
+        print(f"Creating entries from {len(records)} records")
         to_create = []
-        fields_to_check = [
-                "name",
-                "taxid",
-                "comment",
-                "seq",
-                "keywords",
-                "secondary_ac",
-                ]
-
-        existing = {entry.ac: entry for entry in cls.objects.all()}
-
+        kw_to_create = set()
+        entry_keyword_through_objs = []
         for record in records:
-            name = record.description
-            name = name[name.find("Full=")+5:]
-            name = name.split(";")[0]
-            name = name.split(" {")[0]
-
-            taxid = int(record.annotations['ncbi_taxid'][0])
-            comment = record.annotations.get("comment", "")
-            seq = record.seq
+            # prepare keyword through objects
             keywords = record.annotations.get("keywords", [])
+            keywords = [kw.lower() for kw in keywords]
+            entry_keyword_through_objs.extend([
+                cls.keywords.through(entry_id=record.id, keyword_id=kw)
+                for kw in keywords
+            ])
+            kw_to_create.update(keywords)
+
             secondary_ac = record.annotations["accessions"]
+            secondary_ac.remove(record.id)
 
-            if record.id in existing:
-                current_record = existing[record.id]
-                needs_update = []
-                for field in fields_to_check:
-                    new_value = eval(field)
-                    if getattr(current_record, field) != new_value:
-                        setattr(current_record, field, new_value)
-                        needs_update.append(field)
-                if needs_update:
-                    print("updating ", current_record, needs_update)
-                    current_record.save()
-            else:
-                to_create.append(cls(
-                    ac=record.id,
-                    name=name,
-                    seq=seq,
-                    taxid=taxid,
-                    comment=comment,
-                    secondary_ac=secondary_ac,
-                    keywords=keywords
-                ))
-        return cls.objects.bulk_create(to_create, batch_size=1000)
+            to_create.append(cls(
+                ac=record.id,
+                name=record.description.split("=")[1].split(";")[0].split(" {")[0],
+                seq=record.seq,
+                taxid=int(record.annotations['ncbi_taxid'][0]),
+                comment=record.annotations.get("comment", ""),
+                secondary_ac=secondary_ac,
+            ))
+        created = cls.objects.bulk_create(to_create)
+        print(f"Created {len(created)} UniProt entries")
 
-    @classmethod
-    def read_index(cls, filename, uniprot_ids=None):
-        """Read index file with the byte offsets of the uniprot accession numbers
+        kw_existing = set(Keyword.objects.all().values_list("name", flat=True))
+        kw_to_create = kw_to_create - kw_existing
+        kw_to_create = [Keyword(kw) for kw in kw_to_create]
+        kw_created = Keyword.objects.bulk_create(kw_to_create)
+        print(f"Created {len(kw_created)} Keywords")
 
-        return only the byte offset of the requested uniprot ids or all by default
-        """
-        index_dict = {}
-        uniprot_ids = set(uniprot_ids) if uniprot_ids is not None else None
-        with open(filename, 'r') as index_file:
-            previous_entries = []
-            for line in index_file:
-                words = line.strip().split(":")
-                index = int(words[0])
-                these_uniprot_ids = set(words[1:])
-                for entry in previous_entries:
-                    index_dict[entry][1] = index - index_dict[entry][0]
-                previous_entries = []
-                for uniprot_id in these_uniprot_ids:
-                    if uniprot_ids is None or uniprot_id in uniprot_ids:
-                        index_dict[uniprot_id] = [index, -1]
-                        previous_entries.append(uniprot_id)
-        return index_dict
+        rel_created = cls.keywords.through.objects.bulk_create(entry_keyword_through_objs)
+        print(f"Created {len(rel_created)} UniProt - Keywords relations")
+
+        return created
+
+
+class Keyword(models.Model):
+    name = models.TextField(primary_key=True)

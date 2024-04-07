@@ -1,13 +1,12 @@
 
-from uniprot.models import Entry
+from uniprot.models import Entry, Keyword
 
 def run():
     """run this script to generate the pseudoenzyme datasets"""
 
-    # update uniprot index file
-    ## create index
-    Entry.create_index()
-    
-    # Add and update entries
-    Entry.create_and_update_all()
+    # Delete all previous entries and add new entries
+    Entry.objects.all().delete()
+    Keyword.objects.all().delete()
+    Entry.create_from_dat_file()
+
 
