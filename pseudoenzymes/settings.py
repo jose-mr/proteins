@@ -39,6 +39,7 @@ INSTALLED_APPS = [
     # 'django.contrib.staticfiles',
     'uniprot.apps.UniprotConfig',
     'go.apps.GoConfig',
+    'eco.apps.EcoConfig',
     'django_extensions',
 ]
 
@@ -130,4 +131,8 @@ DATA_FOLDER = BASE_DIR / "data"
 
 GO_DATA_FOLDER = DATA_FOLDER / "go"
 GO_DATA_FOLDER.mkdir(parents=True, exist_ok=True)
-ONTOLOGY_FILE = GO_DATA_FOLDER / "go.obo"
+GENE_ONTOLOGY_FILE = GO_DATA_FOLDER / "go.obo"
+
+ECO_DATA_FOLDER = DATA_FOLDER / "eco"
+ECO_DATA_FOLDER.mkdir(parents=True, exist_ok=True)
+ECO_ONTOLOGY_FILE = ECO_DATA_FOLDER / "eco.obo"

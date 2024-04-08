@@ -1,6 +1,7 @@
 
 from uniprot.models import Entry, Keyword
 import go.models as go
+import eco.models as eco
 
 def run():
     """run this script to generate the pseudoenzyme datasets"""
@@ -10,13 +11,21 @@ def run():
     # Keyword.objects.all().delete()
     # Entry.create_from_dat_file()
 
-    # Gene Ontology
-    go.Term.download_ontology()
-    go.Term.objects.all().delete()
-    go.Term.create_from_ontology_file()
 
-    go.Relation.objects.all().delete()
-    go.Relation.create_from_ontology_file()
+    # Gene Ontology
+    # go.Term.download_ontology()
+    # go.Term.objects.all().delete()
+    # go.Term.create_from_ontology_file()
+
+    # go.Relation.objects.all().delete()
+    # go.Relation.create_from_ontology_file()
+
+
+    # ECO Ontology
+    # eco.Term.download_ontology()
+    eco.Term.objects.all().delete()
+    eco.Term.create_from_ontology_file()
+    eco.Relation.create_from_ontology_file()
 
     
 
