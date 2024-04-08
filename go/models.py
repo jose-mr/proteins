@@ -115,7 +115,7 @@ class Relation(models.Model):
     def create_from_ontology_file(cls):
         """Read the ontology file and add all the is_a GO relations to the database"""
         objs = []
-        with open(ONTOLOGY_FILE, 'r') as obo_file:
+        with open(GENE_ONTOLOGY_FILE, 'r') as obo_file:
             term1 = None
             for line in obo_file:
                 if line.startswith("[Term]"):
