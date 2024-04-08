@@ -38,6 +38,7 @@ INSTALLED_APPS = [
     # 'django.contrib.messages',
     # 'django.contrib.staticfiles',
     'uniprot.apps.UniprotConfig',
+    'go.apps.GoConfig',
     'django_extensions',
 ]
 
@@ -126,3 +127,7 @@ DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
 # CUSTOM settings
 DATA_FOLDER = BASE_DIR / "data"
+
+GO_DATA_FOLDER = DATA_FOLDER / "go"
+GO_DATA_FOLDER.mkdir(parents=True, exist_ok=True)
+ONTOLOGY_FILE = GO_DATA_FOLDER / "go.obo"

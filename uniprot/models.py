@@ -4,12 +4,8 @@ from Bio import SeqIO
 
 from django.db import models
 from pseudoenzymes.settings import DATA_FOLDER
-from django.db import connection
 
 DAT_FILE = DATA_FOLDER / "uniprot/uniprot_sprot.dat.gz"
-CURRENT_RELEASE_FILE = DATA_FOLDER / "uniprot/reldate.txt"
-INDEX_FILE = DATA_FOLDER / "uniprot/index"
-INDEX_RELEASE_FILE = DATA_FOLDER / "uniprot/index_release"
 
 class Entry(models.Model):
     ac = models.CharField(
