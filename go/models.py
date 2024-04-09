@@ -9,7 +9,8 @@ from urllib.request import urlretrieve
 # django imports
 from django.db import models, transaction
 
-from pseudoenzymes.settings import GENE_ONTOLOGY_FILE
+from pseudoenzymes.settings import GENE_ONTOLOGY_FILE, GO_GPA_FILE
+import uniprot.models as uniprot
 
 
 class TermQuerySet(models.QuerySet):
@@ -40,6 +41,11 @@ class Term(models.Model):
     definition = models.TextField()
     ASPECTS = {"molecular_function", "biological_process", "cellular_component"}
     aspect = models.TextField(choices=[(aspect, aspect) for aspect in ASPECTS])
+    uniprot_entries = models.ManyToManyField(
+            "uniprot.Entry",
+            through="TermUniProtEntry",
+            related_name="go_terms"
+            )
 
     objects = TermQuerySet.as_manager()
 
@@ -146,55 +152,44 @@ class Relation(models.Model):
         # return self.filter(go_term__in=common.models.GoTerm.objects.catalytic())
 
 
-# class SequenceGo(models.Model):
-    # """Through table to link go with sequence"""
-    # go_term = models.ForeignKey("GoTerm", on_delete=models.CASCADE)
-    # sequence = models.ForeignKey("Sequence", on_delete=models.CASCADE)
-    # eco_term = models.ForeignKey("EcoTerm", on_delete=models.CASCADE)
-    # qualifier = models.CharField(max_length=127, db_index=True)
+class TermUniProtEntry(models.Model):
+    """Through table to link go with UniProt entries"""
+    term = models.ForeignKey("Term", on_delete=models.CASCADE)
+    uniprot_entry = models.ForeignKey("uniprot.Entry", on_delete=models.CASCADE)
+    eco_term = models.ForeignKey("eco.Term", on_delete=models.CASCADE)
+    qualifier = models.CharField(max_length=127, db_index=True)
 
     # objects = SequenceGoQuerySet.as_manager()
 
     # # noinspection PyMissingOrEmptyDocstring
-    # class Meta:
-        # unique_together = ["go_term", "sequence", "qualifier", "eco_term"]
+    class Meta:
+        unique_together = ["term", "uniprot_entry", "qualifier", "eco_term"]
 
-    # @classmethod
-    # def create_objects(cls):
-        # """Populates this table by reading from the gpa file"""
-        # info_tuples = cls._read_gpa_tuples()
-        # print(len(info_tuples))
-        # existing = set(cls.get_unique_together_values())
-        # to_delete = existing - info_tuples
-        # print("Should be deleting {} Sequence<->Go links".format(len(to_delete)))
-        # for t in to_delete:
-            # print(cls.objects.get(go_term_id=t[0], sequence_id=t[1], qualifier=t[2], eco_term_id=t[3]).delete())
-        # to_create = info_tuples - existing
-        # print("Creating {} Sequence<->Go links".format(len(to_create)))
-        # cls.objects.bulk_create(
-            # [cls(go_term_id=t[0], sequence_id=t[1], qualifier=t[2], eco_term_id=t[3]) for t in to_create],
-            # batch_size=5000
-        # )
+    @classmethod
+    def create_from_gpa_file(cls):
+        """Populates this table by reading from the gpa file"""
+        objs_data = cls.read_gpa_tuples()
+        objs = [cls(term_id=d[0], uniprot_entry_id=d[1],
+                qualifier=d[2], eco_term_id=d[3]) for d in objs_data]
+        print(f"Creating {len(objs)} Uniprot<->Go links")
+        cls.objects.bulk_create(objs, batch_size=100000)
 
 
-    # @classmethod
-    # def _read_gpa_tuples(cls):
-        # """Reads information from gpa file and return tuples with information to add"""
-        # from common.models import Sequence, GoTerm
-        # seq_id = dict(Sequence.objects.reviewed().get_idx2id())
-        # go_id = dict(GoTerm.objects.get_idx2id())
-        # eco_id = dict(EcoTerm.objects.get_idx2id())
-        # info = set()
-        # with gzip.open(files.GO_GCRP_GPA, "rt") as gpa_file:
-            # for line in gpa_file:
-                # if line.startswith("UniProtKB"):
-                    # words = line.split()
-                    # uniprot_id = words[1]
-                    # if uniprot_id in seq_id:
-                        # qualifier = words[2]
-                        # go_term = int(words[3].split(":")[1])
-                        # eco_term = words[5].split(":")[1].strip()
-                        # if go_term in go_id:
-                            # info.add((go_id[go_term], seq_id[uniprot_id], qualifier, eco_id[eco_term]))
-        # return info
+    @classmethod
+    def read_gpa_tuples(cls):
+        """Read gpa file and return tuples with data to add"""
+        acs = set(uniprot.Entry.objects.values_list("ac", flat=True))
+        terms = set(Term.objects.values_list("id", flat=True))
+        info = set()
+        with gzip.open(GO_GPA_FILE, "rt") as gpa_file:
+            for line in gpa_file:
+                if line.startswith("UniProtKB"):
+                    words = line.split()
+                    uniprot_id = words[1]
+                    if uniprot_id in acs:
+                        qualifier = words[2]
+                        term = int(words[3].split(":")[1])
+                        eco_term = words[5].split(":")[1].strip()
+                        info.add((term, uniprot_id, qualifier, eco_term))
+        return info
 

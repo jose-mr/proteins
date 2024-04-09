@@ -40,6 +40,7 @@ INSTALLED_APPS = [
     'uniprot.apps.UniprotConfig',
     'go.apps.GoConfig',
     'eco.apps.EcoConfig',
+    'ec.apps.EcConfig',
     'django_extensions',
 ]
 
@@ -133,6 +134,12 @@ GO_DATA_FOLDER = DATA_FOLDER / "go"
 GO_DATA_FOLDER.mkdir(parents=True, exist_ok=True)
 GENE_ONTOLOGY_FILE = GO_DATA_FOLDER / "go.obo"
 
+GO_GPA_FILE = GO_DATA_FOLDER / "goa_uniprot_all.gpa.gz"
+
 ECO_DATA_FOLDER = DATA_FOLDER / "eco"
 ECO_DATA_FOLDER.mkdir(parents=True, exist_ok=True)
 ECO_ONTOLOGY_FILE = ECO_DATA_FOLDER / "eco.obo"
+
+EC_DATA_FOLDER = DATA_FOLDER / "ec"
+EC_DATA_FOLDER.mkdir(parents=True, exist_ok=True)
+EC_INTENZ_XML = EC_DATA_FOLDER / "intenz.xml"
