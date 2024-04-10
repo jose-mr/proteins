@@ -35,6 +35,11 @@ def run():
 
 
     # # EC numbers
-    # ec.Entry.download_intenz_xml_file()
-    ec.Entry.objects.all().delete()
-    ec.Entry.create_from_intenz_file()
+    # ec.Entry.download_classes_file()
+    # ec.Entry.download_ec_dat_file()
+    # ec.Entry.objects.all().delete()
+    # ec.Entry.create_classes_classes_files()
+    # ec.Entry.create_entries_from_dat_file()
+
+    ec.EntryUniProtEntry.objects.all().delete()
+    ec.EntryUniProtEntry.create_from_dat_file()

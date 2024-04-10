@@ -3,9 +3,8 @@ import gzip
 from Bio import SeqIO
 
 from django.db import models
-from pseudoenzymes.settings import DATA_FOLDER
+from pseudoenzymes.settings import SWISSPROT_DAT_FILE
 
-DAT_FILE = DATA_FOLDER / "uniprot/uniprot_sprot.dat.gz"
 
 class Entry(models.Model):
     ac = models.CharField(
@@ -30,7 +29,7 @@ class Entry(models.Model):
     def create_from_dat_file(cls):
         """Create all UniProt entries from a uniprot dat_gz file"""
         batch_size = 100000
-        with gzip.open(DAT_FILE, "rb") as dat_file:
+        with gzip.open(SWISSPROT_DAT_FILE, "rb") as dat_file:
             records = []
             for record in SeqIO.parse(dat_file, "swiss"):
                 records.append(record)
