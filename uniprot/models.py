@@ -3,7 +3,7 @@ import gzip
 from Bio import SeqIO
 
 from django.db import models
-from pseudoenzymes.settings import SWISSPROT_DAT_FILE
+from pseudoenzymes.settings import SWISSPROT_DAT_FILE, SWISSPROT_ACS_FILE
 
 
 class Entry(models.Model):
@@ -79,6 +79,14 @@ class Entry(models.Model):
         print(f"Created {len(rel_created)} UniProt - Keywords relations")
 
         return created
+
+    @classmethod
+    def dump_all_acs(cls):
+        "write all primary acs and secondary acs into a file"
+        acs = cls.objects.values_list("ac", flat=True)
+        print(acs)
+        with open(SWISSPROT_ACS_FILE, "w") as acs_file:
+            acs_file.writelines(acs)
 
 
 class Keyword(models.Model):

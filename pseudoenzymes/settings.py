@@ -41,6 +41,7 @@ INSTALLED_APPS = [
     'go.apps.GoConfig',
     'eco.apps.EcoConfig',
     'ec.apps.EcConfig',
+    'cath.apps.CathConfig',
     'django_extensions',
 ]
 
@@ -130,6 +131,7 @@ DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 # CUSTOM settings
 DATA_FOLDER = BASE_DIR / "data"
 SWISSPROT_DAT_FILE = DATA_FOLDER / "uniprot/uniprot_sprot.dat.gz"
+SWISSPROT_ACS_FILE = DATA_FOLDER / "uniprot/acs.txt"
 
 GO_DATA_FOLDER = DATA_FOLDER / "go"
 GO_DATA_FOLDER.mkdir(parents=True, exist_ok=True)
@@ -146,3 +148,9 @@ EC_DATA_FOLDER.mkdir(parents=True, exist_ok=True)
 EC_DAT_FILE = EC_DATA_FOLDER / "enzyme.dat"
 EC_CLASSES_FILE = EC_DATA_FOLDER / "enzclass.txt"
 EC_INTENZ_XML = ECO_DATA_FOLDER / "intenz.xml"
+
+CATH_DATA_FOLDER = DATA_FOLDER / "cath"
+CATH_NAMES_FILE = CATH_DATA_FOLDER / "cath-b-newest-names.gz"
+
+INTERPRO_DATA_FOLDER = DATA_FOLDER / "interpro"
+INTERPRO_DAT_FILE = INTERPRO_DATA_FOLDER / "protein2ipr.dat.gz"
