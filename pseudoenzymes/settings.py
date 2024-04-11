@@ -145,3 +145,4 @@ EC_DATA_FOLDER = DATA_FOLDER / "ec"
 EC_DATA_FOLDER.mkdir(parents=True, exist_ok=True)
 EC_DAT_FILE = EC_DATA_FOLDER / "enzyme.dat"
 EC_CLASSES_FILE = EC_DATA_FOLDER / "enzclass.txt"
+EC_INTENZ_XML = ECO_DATA_FOLDER / "intenz.xml"
