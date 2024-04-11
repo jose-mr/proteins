@@ -154,3 +154,4 @@ CATH_NAMES_FILE = CATH_DATA_FOLDER / "cath-b-newest-names.gz"
 
 INTERPRO_DATA_FOLDER = DATA_FOLDER / "interpro"
 INTERPRO_DAT_FILE = INTERPRO_DATA_FOLDER / "protein2ipr.dat.gz"
+INTERPRO_ONLY_G3_SP_DAT_FILE = INTERPRO_DATA_FOLDER / "g3d_swissprot_only.txt"

@@ -8,7 +8,7 @@ from urllib.request import urlretrieve
 from django.db import models
 
 # pseudoenzymes imports
-from pseudoenzymes.settings import CATH_NAMES_FILE, INTERPRO_DAT_FILE
+from pseudoenzymes.settings import CATH_NAMES_FILE, INTERPRO_ONLY_G3_SP_DAT_FILE
 
 
 class Superfamily(models.Model):
@@ -58,7 +58,7 @@ class SuperfamilyUniprotEntry(models.Model):
     def create_from_interpro_file(cls):
         """Update table using Gene3D file"""
         objs = []
-        with gzip.open(INTERPRO_DAT_FILE, 'rt') as interpro_file:
+        with open(INTERPRO_ONLY_G3_SP_DAT_FILE, 'r') as interpro_file:
             for line in interpro_file:
                 print(line)
             # csv_reader = csv.reader(cath_file)

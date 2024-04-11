@@ -31,7 +31,7 @@ def run():
 
 
     # # Link ontologies to UniProt entries
-    # go.TermUniProtEntry.objects.all().delete() ff
+    # go.TermUniProtEntry.objects.all().delete()
     # go.TermUniProtEntry.create_from_gpa_file()
 
 
