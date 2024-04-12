@@ -86,6 +86,7 @@ class Term(models.Model):
                 elif line.startswith("name:"):
                     info["name"] = line.split(":", maxsplit=1)[1].strip()
         cls.objects.bulk_create(objs)
+        print(f"Creating {len(objs)} Go Terms")
         # cls.objects.catalytic_filter().update(is_catalytic=True)
 
 
@@ -134,22 +135,7 @@ class Relation(models.Model):
                 elif line == "\n":
                     term1 = None
         cls.objects.bulk_create(objs)
-
-
-# class SequenceGoQuerySet(models.QuerySet):
-    # """Some predefined querysets for the SequenceGo associations"""
-
-    # def experimental(self):
-        # """filters associations supported by experimental evidence"""
-        # return self.filter(eco_term__in=common.models.EcoTerm.objects.experimental())
-    
-    # def enables(self, enables=True):
-        # """filters associations with the enable qualifier"""
-        # return self.filter(qualifier="enables" if enables else "NOT|enables")
-    
-    # def catalytic(self, enables=True):
-        # """filters associations to catalytic go terms"""
-        # return self.filter(go_term__in=common.models.GoTerm.objects.catalytic())
+        print(f"Creating {len(objs)} go term relations")
 
 
 class TermUniProtEntry(models.Model):
@@ -159,9 +145,7 @@ class TermUniProtEntry(models.Model):
     eco_term = models.ForeignKey("eco.Term", on_delete=models.CASCADE)
     qualifier = models.CharField(max_length=127, db_index=True)
 
-    # objects = SequenceGoQuerySet.as_manager()
 
-    # # noinspection PyMissingOrEmptyDocstring
     class Meta:
         unique_together = ["term", "uniprot_entry", "qualifier", "eco_term"]
 

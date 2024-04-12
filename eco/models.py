@@ -75,6 +75,7 @@ class Term(models.Model):
                 elif line.startswith("name:"):
                     info["name"] = line.split(":", maxsplit=1)[1].strip()
         cls.objects.bulk_create(objs)
+        print(f"Creating {len(objs)} ECO terms")
 
 
 class Relation(models.Model):
@@ -91,15 +92,12 @@ class Relation(models.Model):
             )
     relation = models.CharField(max_length=255, db_index=True)
 
-    # objects = models.Manager()
-
     def __repr__(self):
         return f"{self.term1} {self.relation} {self.term2}"
 
     def __str__(self):
         return self.__repr__()
 
-    # noinspection PyMissingOrEmptyDocstring
     class Meta:
         unique_together = ['term1', 'relation', 'term2']
 
@@ -120,5 +118,6 @@ class Relation(models.Model):
                 elif line == "\n":
                     term1 = None
         cls.objects.bulk_create(objs)
+        print(f"Creating {len(objs)} ECO terms relations")
 
 
