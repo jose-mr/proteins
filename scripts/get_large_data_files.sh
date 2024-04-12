@@ -17,5 +17,7 @@ wget -c ftp://ftp.ebi.ac.uk/pub/databases/GO/goa/UNIPROT/goa_uniprot_all.gpa.gz
 mkdir -p $SCRIPT_PATH/../data/interpro
 cd  $SCRIPT_PATH/../data/interpro
 wget -c https://ftp.ebi.ac.uk/pub/databases/interpro/current_release/protein2ipr.dat.gz
-# create file with swissprot and gene 3d annotations only
-zgrep -f ../uniprot/acs.txt protein2ipr.dat.gz  | grep G3DSA > g3d_swissprot_only.txt
+
+# tried with regex to select only patterns at the start of the line but 
+# it used to much ram. this g3d_swissprot_only will have more entries than swissprot
+zgrep G3DSA protein2ipr.dat.gz | grep -f ../uniprot/acs.txt > g3d_swissprot_only.txt

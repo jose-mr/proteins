@@ -8,6 +8,7 @@ from urllib.request import urlretrieve
 from django.db import models
 
 # pseudoenzymes imports
+import uniprot.models as uniprot
 from pseudoenzymes.settings import CATH_NAMES_FILE, INTERPRO_ONLY_G3_SP_DAT_FILE
 
 
@@ -15,6 +16,11 @@ class Superfamily(models.Model):
     """Model for the CATH superfamilies"""
     number = models.TextField(primary_key=True)
     name = models.TextField()
+    uniprot_entries = models.ManyToManyField(
+            "uniprot.Entry",
+            related_name="cath_superfamilies",
+            through="SuperfamilyUniprotEntry"
+            )
 
     def __repr__(self):
         return str(self.number)
@@ -49,7 +55,7 @@ class SuperfamilyUniprotEntry(models.Model):
     superfamily = models.ForeignKey("Superfamily", on_delete=models.CASCADE)
     start = models.IntegerField()
     end = models.IntegerField()
-    evalue = models.FloatField()
+    # evalue = models.FloatField()
 
     class Meta:
         unique_together = ("uniprot_entry", "superfamily", "start", "end")
@@ -58,26 +64,18 @@ class SuperfamilyUniprotEntry(models.Model):
     def create_from_interpro_file(cls):
         """Update table using Gene3D file"""
         objs = []
+        uniprot_entries = set(uniprot.Entry.objects.values_list("ac", flat=True))
         with open(INTERPRO_ONLY_G3_SP_DAT_FILE, 'r') as interpro_file:
             for line in interpro_file:
-                print(line)
-            # csv_reader = csv.reader(cath_file)
-            # for no, words in enumerate(csv_reader):
-                # uniprot, _, _, _, _, cath, all_limits, evalue, _ = words
-                # for limits in all_limits.split(","):
-                    # start, end = limits.split("-")
-                    # try:
-                        # info_gene3d.add(
-                            # (uniprot_to_id_dict[uniprot], cath_to_id_dict[cath], int(start), int(end), float(evalue)))
-                    # except KeyError:
-                        # continue
-        # existing_pairs = set(cls.objects.values_list('sequence_id', 'cath_id', 'start', 'end', 'evalue'))
-        # to_delete = existing_pairs - info_gene3d
-        # print("Deleting {} cath<->Uniprot links".format(len(to_delete)))
-        # for t in to_delete:
-            # cls.objects.get(sequence_id=t[0], cath_id=t[1], start=t[2], end=t[3]).delete()
-        # to_create = info_gene3d - existing_pairs
-        # print("Adding {} new cath<->UniProt links".format(len(to_create)))
-        # cls.objects.bulk_create([cls(sequence_id=t[0], cath_id=t[1], start=t[2], end=t[3], evalue=t[4])
-                                 # for t in to_create], batch_size=5000)
-
+                ac, _, _, g3d, start, end = line.strip().split("\t")
+                superfamily = g3d.split(":")[1]
+                # file contain some uniprot entries that do not belong to swissprot
+                if ac in uniprot_entries:
+                    objs.append(cls(
+                        uniprot_entry_id=ac,
+                        superfamily_id=superfamily,
+                        start=start,
+                        end=end,
+                        ))
+        print(f"Creating {len(objs)} cath <-> uniprot associations")
+        cls.objects.bulk_create(objs, batch_size=100000)
