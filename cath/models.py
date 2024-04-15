@@ -6,21 +6,42 @@ from urllib.request import urlretrieve
 
 # django imports
 from django.db import models
+from django.db.models import Count, Q
 
 # pseudoenzymes imports
 import uniprot.models as uniprot
 from pseudoenzymes.settings import CATH_NAMES_FILE, INTERPRO_ONLY_G3_SP_DAT_FILE
 
+class SuperfamilyQuerySet(models.QuerySet):
+
+    def superfamilies(self):
+        superfamilies = [obj.number for obj in self if
+                         obj.number.count(".") == 3]
+        return self.filter(number__in=superfamilies)
+
+    def annotate_uniprot_count(self):
+        return self.annotate(uniprot_entries_count=Count('uniprot_entries'))
+
+    def annotate_uniprot_enzyme_ec_count(self):
+        with_ec = Count("uniprot_entries", filter=Q(uniprot_entries__ec_entries__isnull=False))
+        # with_ec = Count("uniprot_entries", filter=Q(
+            # uniprot_entries__in=uniprot.Entry.objects.enzymes_ec()))
+        no_ec = Count("uniprot_entries", filter=Q(uniprot_entries__ec_entries__isnull=True))
+        return self.annotate(uniprot_entries_ec_count=with_ec,
+                             uniprot_entries_no_ec_count=no_ec)
+
 
 class Superfamily(models.Model):
     """Model for the CATH superfamilies"""
-    number = models.TextField(primary_key=True)
-    name = models.TextField()
+    number = models.TextField(primary_key=True, verbose_name="CATH number")
+    name = models.TextField(verbose_name="CATH name")
     uniprot_entries = models.ManyToManyField(
             "uniprot.Entry",
             related_name="cath_superfamilies",
             through="SuperfamilyUniprotEntry"
             )
+
+    objects = SuperfamilyQuerySet.as_manager()
 
     def __repr__(self):
         return str(self.number)

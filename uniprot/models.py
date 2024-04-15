@@ -5,6 +5,10 @@ from Bio import SeqIO
 from django.db import models
 from pseudoenzymes.settings import SWISSPROT_DAT_FILE, SWISSPROT_ACS_FILE
 
+class EntryQuerySet(models.QuerySet):
+
+    def enzymes_ec(self, has_ec=True):
+        return self.filter(ec_entries__isnull=not(has_ec))
 
 class Entry(models.Model):
     ac = models.CharField(
@@ -24,6 +28,7 @@ class Entry(models.Model):
     keywords = models.ManyToManyField("Keyword", related_name="entries")
     seq = models.TextField()
 
+    objects = EntryQuerySet.as_manager()
 
     @classmethod
     def create_from_dat_file(cls):
