@@ -140,8 +140,14 @@ class Relation(models.Model):
 
 class TermUniProtEntry(models.Model):
     """Through table to link go with UniProt entries"""
-    term = models.ForeignKey("Term", on_delete=models.CASCADE)
-    uniprot_entry = models.ForeignKey("uniprot.Entry", on_delete=models.CASCADE)
+    term = models.ForeignKey(
+            "Term",
+            on_delete=models.CASCADE,
+            related_name="uniprot_associations")
+    uniprot_entry = models.ForeignKey(
+            "uniprot.Entry",
+            on_delete=models.CASCADE,
+            related_name="go_associations")
     eco_term = models.ForeignKey("eco.Term", on_delete=models.CASCADE)
     qualifier = models.CharField(max_length=127, db_index=True)
 

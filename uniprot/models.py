@@ -4,11 +4,30 @@ from Bio import SeqIO
 
 from django.db import models
 from pseudoenzymes.settings import SWISSPROT_DAT_FILE, SWISSPROT_ACS_FILE
+import go.models as go
 
 class EntryQuerySet(models.QuerySet):
 
-    def enzymes_ec(self, has_ec=True):
-        return self.filter(ec_entries__isnull=not(has_ec))
+    def enzymes_ec(self, catalytic=True):
+        return self.filter(ec_entries__isnull=not(catalytic))
+
+    def enzymes_kw(self, catalytic=True):
+        enzymes = self.filter(keywords__in=Keyword.objects.enzymatic())
+        if catalytic:
+            return enzymes
+        else:
+            return self.exclude(ac__in=enzymes)
+
+    def enzymes_go(self, catalytic=True):
+        catalytic_association = go.TermUniProtEntry.objects.filter(
+                term__in=go.Term.objects.catalytic(),
+                qualifier="enables"
+                )
+        enzymes = self.filter(go_associations__in=catalytic_association)
+        if catalytic:
+            return enzymes
+        else:
+            return self.exclude(ac__in=enzymes)
 
 class Entry(models.Model):
     ac = models.CharField(
@@ -89,10 +108,32 @@ class Entry(models.Model):
     def dump_all_acs(cls):
         "write all primary acs and secondary acs into a file"
         acs = cls.objects.values_list("ac", flat=True)
-        print(acs)
         with open(SWISSPROT_ACS_FILE, "w") as acs_file:
             acs_file.writelines(acs)
 
+class KeywordQuerySet(models.QuerySet):
+
+    def enzymatic(self):
+        # see https://www.uniprot.org/keywords/KW-9992
+        top_level_ez_kws = {
+          "transferase",
+          "allosteric Enzyme",
+          "ligase",
+          "hydrolase",
+          "lyase",
+          "oxidoresductase",
+          "dna invertase",
+          "excision nuclease",
+          "lyase",
+          "oxidoresductase",
+          "dna invertase",
+          "excision nuclease",
+          "isomerase",
+          "translocase"
+        }
+        return self.filter(name__in=top_level_ez_kws)
 
 class Keyword(models.Model):
     name = models.TextField(primary_key=True)
+
+    objects = KeywordQuerySet.as_manager()
