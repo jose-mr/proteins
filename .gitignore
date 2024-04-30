@@ -1,6 +1,8 @@
 *.pyc
 __pycache__
 db.sqlite3
-data
 
 *.nfs*
+
+data
+out
