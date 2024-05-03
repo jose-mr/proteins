@@ -11,6 +11,7 @@ from django.db import models, transaction
 
 from pseudoenzymes.settings import GENE_ONTOLOGY_FILE, GO_GPA_FILE
 import uniprot.models as uniprot
+import eco.models as eco
 
 
 class TermQuerySet(models.QuerySet):
@@ -19,6 +20,10 @@ class TermQuerySet(models.QuerySet):
     def catalytic(self):
         """return all catalytic go terms"""
         return self.children_of(Term.objects.filter(name="catalytic activity"))
+
+    def functional(self):
+        """go terms related with the function of the protein"""
+        return self.children_of(Term.objects.filter(name="molecular_function"))
 
     def children_of(self, parents):
         """recursively find all terms that are children of these parents
@@ -138,6 +143,29 @@ class Relation(models.Model):
         print(f"Creating {len(objs)} go term relations")
 
 
+class TermUniProtEntryQuerySet(models.QuerySet):
+    """Some predefined querysets for the GoTerm model"""
+
+    def catalytic(self):
+        """return all catalytic go uniprot associations"""
+        return self.filter(term__in=Term.objects.catalytic(), qualifier="enables")
+
+    def not_catalytic(self):
+        """return associations with proof of non catalytic activity for a given reaction
+
+        the protein might have other catalytic activities
+        this does not include proteins that were not tested to be catalytic
+        """
+        return self.filter(term__in=Term.objects.catalytic(), qualifier="NOT|enables")
+
+    def functional(self):
+        """associations related with the function of the protein"""
+        return self.filter(term__in=Term.objects.functional())
+
+    def experimental(self):
+        """return all experimentally supported associations"""
+        return self.filter(eco_term__in=eco.Term.objects.experimental())
+
 class TermUniProtEntry(models.Model):
     """Through table to link go with UniProt entries"""
     term = models.ForeignKey(
@@ -151,6 +179,7 @@ class TermUniProtEntry(models.Model):
     eco_term = models.ForeignKey("eco.Term", on_delete=models.CASCADE)
     qualifier = models.CharField(max_length=127, db_index=True)
 
+    objects = TermUniProtEntryQuerySet.as_manager()
 
     class Meta:
         unique_together = ["term", "uniprot_entry", "qualifier", "eco_term"]

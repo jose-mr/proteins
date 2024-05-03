@@ -2,6 +2,7 @@ import gzip
 
 from Bio import SeqIO
 
+from django.db.models import Q
 from django.db import models
 from pseudoenzymes.settings import SWISSPROT_DAT_FILE, SWISSPROT_ACS_FILE
 import go.models as go
@@ -19,6 +20,8 @@ class EntryQuerySet(models.QuerySet):
             return self.exclude(ac__in=enzymes)
 
     def enzymes_go(self, catalytic=True):
+        enzymes = self.filter(go_associations__in=go.TermUniProtEntry.objects().catalytic())
+
         catalytic_association = go.TermUniProtEntry.objects.filter(
                 term__in=go.Term.objects.catalytic(),
                 qualifier="enables"
@@ -28,6 +31,20 @@ class EntryQuerySet(models.QuerySet):
             return enzymes
         else:
             return self.exclude(ac__in=enzymes)
+
+    def catalytic_activity(self):
+        return self.filter(comment__contains="CATALYTIC ACTIVITY:")
+
+    def caution(self):
+        return self.filter(comment__contains="CAUTION:")
+
+    def inactive(self):
+        return self.filter(
+                Q(name__istartswith="inactive")|
+                Q(name__istartswith="probable inactive")|
+                Q(name__istartswith="probably inactive")|
+                Q(name__istartswith="putative inactive")
+                )
 
 class Entry(models.Model):
     ac = models.CharField(
@@ -48,6 +65,9 @@ class Entry(models.Model):
     seq = models.TextField()
 
     objects = EntryQuerySet.as_manager()
+
+    def __str__(self):
+        return self.ac
 
     @classmethod
     def create_from_dat_file(cls):
@@ -110,6 +130,14 @@ class Entry(models.Model):
         acs = cls.objects.values_list("ac", flat=True)
         with open(SWISSPROT_ACS_FILE, "w") as acs_file:
             acs_file.writelines(acs)
+
+    @property
+    def catalytic_activities(self):
+        return [line for line in self.comment.split("\n") if line.startswith("CATALYTIC ACTIVITY:")]
+
+    @property
+    def cautions(self):
+        return [line for line in self.comment.split("\n") if line.startswith("CAUTION:")]
 
 class KeywordQuerySet(models.QuerySet):
 
