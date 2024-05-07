@@ -170,3 +170,13 @@ INTERPRO_ONLY_G3_SP_DAT_FILE = INTERPRO_DATA_FOLDER / "g3d_swissprot_only.txt"
 
 # ANALYSIS OUTPUT
 OUT_FOLDER = BASE_DIR / "out"
+
+# MSA and Trees
+MSA_FOLDER = OUT_FOLDER / "msa"
+MSA_FOLDER.mkdir(parents=True, exist_ok=True)
+
+MSA_BY_DOMAIN_ARCHITECTURE = MSA_FOLDER / "domain_architecture"
+MSA_BY_DOMAIN_ARCHITECTURE.mkdir(parents=True, exist_ok=True)
+
+MSA_BY_DOMAIN_STRIP = MSA_FOLDER / "domain_strip"
+MSA_BY_DOMAIN_STRIP.mkdir(parents=True, exist_ok=True)
