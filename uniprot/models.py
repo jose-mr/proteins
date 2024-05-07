@@ -2,7 +2,7 @@ import gzip
 
 from Bio import SeqIO
 
-from django.db.models import Q
+from django.db.models import Q, Count
 from django.db import models
 from pseudoenzymes.settings import SWISSPROT_DAT_FILE, SWISSPROT_ACS_FILE
 import go.models as go
@@ -46,6 +46,11 @@ class EntryQuerySet(models.QuerySet):
                 Q(name__istartswith="putative inactive")
                 )
 
+    def single_domain(self):
+        """return uniprot entries that are associated with a single CATH superfamily"""
+        return self.annotate(domain_count=Count("cath_superfamilies")).filter(domain_count=1)\
+                .prefetch_related("cath_superfamilies")
+
 class Entry(models.Model):
     ac = models.CharField(
             primary_key=True,
@@ -62,7 +67,7 @@ class Entry(models.Model):
             verbose_name="NCBI TaxId"
     )
     keywords = models.ManyToManyField("Keyword", related_name="entries")
-    seq = models.TextField()
+    seq = models.ForeignKey("sequence", related_name="uniprot_entries", on_delete=models.PROTECT)
 
     objects = EntryQuerySet.as_manager()
 
@@ -89,6 +94,17 @@ class Entry(models.Model):
         to_create = []
         kw_to_create = set()
         entry_keyword_through_objs = []
+        # sequence objects
+        seqs_to_create = []
+        existing_seqs = set(Sequence.objects.values_list("seq", flat=True))
+        for record in records:
+            if record.seq not in existing_seqs:
+                seqs_to_create.append(Sequence(seq=record.seq))
+                existing_seqs.add(record.seq)
+        Sequence.objects.bulk_create(seqs_to_create) 
+        seq2id = {seq.seq: seq.id for seq in Sequence.objects.all()}
+
+
         for record in records:
             # prepare keyword through objects
             keywords = record.annotations.get("keywords", [])
@@ -105,7 +121,7 @@ class Entry(models.Model):
             to_create.append(cls(
                 ac=record.id,
                 name=record.description.split("=")[1].split(";")[0].split(" {")[0],
-                seq=record.seq,
+                seq_id=seq2id[record.seq],
                 taxid=int(record.annotations['ncbi_taxid'][0]),
                 comment=record.annotations.get("comment", ""),
                 secondary_ac=secondary_ac,
@@ -165,3 +181,7 @@ class Keyword(models.Model):
     name = models.TextField(primary_key=True)
 
     objects = KeywordQuerySet.as_manager()
+
+class Sequence(models.Model):
+    seq = models.TextField(unique=True)
+

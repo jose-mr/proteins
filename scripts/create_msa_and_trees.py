@@ -3,6 +3,8 @@ import subprocess
 from multiprocessing.pool import ThreadPool
 import os
 from collections import defaultdict
+from django.db import connection
+from django.db.models import Count
 
 import cath.models as cath
 import uniprot.models as uniprot
@@ -15,7 +17,22 @@ def run():
     # run_mafft(folder=MSA_BY_DOMAIN_ARCHITECTURE)
 
     # create_msa_fasta_single_domain_strip()
-    run_mafft(folder=MSA_BY_DOMAIN_STRIP)
+
+
+#     domain_to_single_sequences = defaultdict(list)
+    # print(len(connection.queries))
+    # for uniprot_entry in uniprot.Entry.objects.single_domain():
+        # domain_to_single_sequences[list(uniprot_entry.cath_superfamilies.all())[0]].append(uniprot_entry)
+    # print(len(connection.queries))
+    # domain_to_single_sequences = {k: v for k, v in domain_to_single_sequences.items() if len(v) >= 10}
+    # print(len(domain_to_single_sequences.keys()))
+
+
+    # run_mafft(folder=MSA_BY_DOMAIN_STRIP)
+
+    single_domain_sequence_associations = cath.SuperfamilyUniprotEntry.objects.single_domain_sequences()
+    print(single_domain_sequence_associations)
+    print(single_domain_sequence_associations.count())
 
 
 def create_msa_fasta_single_domain_strip():
@@ -84,8 +101,6 @@ def create_msa_fasta_files(min_number_seqs=10):
                     lines.append(f"> {uniprot_entry.ac}")
                     lines.extend(wrap(uniprot_entry.seq, 80))
                 fasta_file.writelines("\n".join(lines))
-
-
 
 
 def run_mafft(delete_old=False, folder=MSA_FOLDER):
