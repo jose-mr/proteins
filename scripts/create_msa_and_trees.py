@@ -5,6 +5,7 @@ import os
 from collections import defaultdict
 from django.db import connection
 from django.db.models import Count
+from Bio import Align
 
 import cath.models as cath
 import uniprot.models as uniprot
@@ -12,54 +13,64 @@ from pseudoenzymes.settings import MSA_FOLDER, MSA_BY_DOMAIN_ARCHITECTURE, MSA_B
 
 def run():
     print("creating fasta files for multi-sequence-alignment")
-    # create_msa_fa# sta_files()
     # create_msa_fasta_same_domain_architecture()
     # run_mafft(folder=MSA_BY_DOMAIN_ARCHITECTURE)
 
-    # create_msa_fasta_single_domain_strip()
+    create_msa_fasta_single_domain_strip()
+    run_mafft(folder=MSA_BY_DOMAIN_STRIP)
+    load_msa_single_domain()
 
 
-#     domain_to_single_sequences = defaultdict(list)
-    # print(len(connection.queries))
-    # for uniprot_entry in uniprot.Entry.objects.single_domain():
-        # domain_to_single_sequences[list(uniprot_entry.cath_superfamilies.all())[0]].append(uniprot_entry)
-    # print(len(connection.queries))
-    # domain_to_single_sequences = {k: v for k, v in domain_to_single_sequences.items() if len(v) >= 10}
-    # print(len(domain_to_single_sequences.keys()))
+def load_msa_single_domain():
+    """
+    load the multisequencealignment result into the db for sequence with single domain only
 
+    it uses the MSA_BY_DOMAIN_STRIP which also includes domains from multidomain sequences
+    these improve the quality of the alignment but are not saved in the db
+    """
 
-    # run_mafft(folder=MSA_BY_DOMAIN_STRIP)
+    name = f"single_domain_strip"
 
-    single_domain_sequence_associations = cath.SuperfamilyUniprotEntry.objects.single_domain_sequences()
-    print(single_domain_sequence_associations)
-    print(single_domain_sequence_associations.count())
+    for out_filename in MSA_BY_DOMAIN_STRIP.glob("*out.fasta"):
+        family = out_filename.stem.replace("_out", "")
+        deleted = uniprot.MultiSequenceAlignment.objects.filter(family=family, name=name).delete()
+        print("Deleted", deleted)
+        alignment = Align.read(out_filename, "fasta")
+        print(f"Reading {len(alignment)} aligned sequences")
+        to_create = []
+        with open(out_filename, "r") as out_file:
+            seq_id_to_align = defaultdict(list)
+            for line in out_file:
+                if line.startswith(">"):
+                    seq_id = line.split()[1]
+                else:
+                    seq_id_to_align[seq_id].append(line.strip())
+            for seq_id, lines in seq_id_to_align.items():
+                to_create.append(uniprot.MultiSequenceAlignment(
+                    name=name,
+                    family=family,
+                    seq_id=seq_id,
+                    alignment="".join(lines)
+                ))
+        print(f"Creating {len(to_create)} msa rows")
+        uniprot.MultiSequenceAlignment.objects.bulk_create(to_create)
 
 
 def create_msa_fasta_single_domain_strip():
-    """create fasta files for each domain, containing only the relevant sequence portion"""
-    cath_uniprots = cath.SuperfamilyUniprotEntry.objects.all()\
-            .order_by("uniprot_entry_id", "start")\
-            .select_related("uniprot_entry")
+    """create fasta files for each domain, containing only the relevant sequence portion
 
-    domain_to_seqs = defaultdict(list)
-    for cath_uniprot in cath_uniprots:
-        uniprot = cath_uniprot.uniprot_entry
-        superfamily = cath_uniprot.superfamily_id
-        domain_to_seqs[superfamily].append(
-                (uniprot, int(cath_uniprot.start), int(cath_uniprot.end)) )
+    includes domains from sequences with several domains"""
+    superfamily_to_sequences = defaultdict(set)
+    for cath_uniprot in cath.SuperfamilyUniprotEntry.objects.all().select_related("seq"):
+        superfamily_to_sequences[cath_uniprot.superfamily_id].add(cath_uniprot.seq)
 
-    for superfamily, sequences_start in domain_to_seqs.items():
-        if len(sequences_start) >= 10:
-            fasta_name = f"{superfamily}_in.fasta"
-            print(fasta_name)
-            with open(MSA_BY_DOMAIN_STRIP / fasta_name, "w") as fasta_file:
-                lines = []
-                for sequence, start, end in sequences_start:
-                    print(sequence,start, end)
-                    lines.append(f"> {sequence.ac} {start} {end}")
-                    stripped_seq = sequence.seq[start-1:end]
-                    lines.extend(wrap(stripped_seq, 80))
-                fasta_file.writelines("\n".join(lines))
+    for superfamily, sequences in superfamily_to_sequences.items():
+        fasta_name = f"{superfamily}_in.fasta"
+        with open(MSA_BY_DOMAIN_STRIP / fasta_name, "w") as fasta_file:
+            for sequence in sequences:
+                fasta_file.write(f"> {sequence.id}\n")
+                for line in wrap(sequence.seq, 80):
+                    fasta_file.write(line + "\n")
 
 def create_msa_fasta_same_domain_architecture():
     """create fasta files with sequences that have the same domain architecture"""
@@ -88,36 +99,17 @@ def create_msa_fasta_same_domain_architecture():
                     lines.extend(wrap(sequence.seq, 80))
                 fasta_file.writelines("\n".join(lines))
 
-def create_msa_fasta_files(min_number_seqs=10):
-    # create fasta files with all the sequences belonging to each cath superfamily
-    superfamilies = cath.Superfamily.objects.superfamilies().prefetch_related("uniprot_entries")
 
-    for superfamily in superfamilies:
-        if (uniprot_entries := superfamily.uniprot_entries.all()).count() >= min_number_seqs:
-            # with open(MSA_FOLDER / f"{str(superfamily).replace(".", "_")}.fasta", "w") as fasta_file:
-            with open(MSA_FOLDER / f"{superfamily}_in.fasta", "w") as fasta_file:
-                lines = []
-                for uniprot_entry in uniprot_entries:
-                    lines.append(f"> {uniprot_entry.ac}")
-                    lines.extend(wrap(uniprot_entry.seq, 80))
-                fasta_file.writelines("\n".join(lines))
-
-
-def run_mafft(delete_old=False, folder=MSA_FOLDER):
-    """
-    Runs mafft for every fasta file in folder
-    """
+def run_mafft(folder=MSA_FOLDER):
+    """run mafft for every fasta file in folder, overwrites existing files"""
     fasta_filenames = [path for path in folder.iterdir() if path.stem.endswith("_in")]
-
     n_cpu = 16
     commands = []
     for filename in fasta_filenames:
-        # command = "{} --thread {} --auto --leavegappyregion {} --anysymbol {} > {}/{}.out.fasta".format(
-        #     MAFFT_EXE, 1 if turbo else 1, "--memsave " if turbo else "", filename, output_folder, uniprot_id)
-        command = f"mafft --thread {n_cpu} --auto --leavegappyregion {filename} > {folder}/{filename.stem.replace("in", "out")}.fasta 2> {folder}/{filename.stem}.out"
+        command = (f"mafft --anysymbol --thread {n_cpu} --auto --leavegappyregion {filename}"
+                   f"> {folder}/{filename.stem.replace("in", "out")}.fasta"
+                   f"2> {folder}/{filename.stem}.out")
         commands.append(command)
-        # subprocess.run(command, shell=True)
-
     with ThreadPool(n_cpu) as pool:
         pool.map(lambda p: subprocess.run(p, shell=True), commands)
 

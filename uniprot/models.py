@@ -185,3 +185,15 @@ class Keyword(models.Model):
 class Sequence(models.Model):
     seq = models.TextField(unique=True)
 
+class MultiSequenceAlignment(models.Model):
+    name = models.TextField()
+    family = models.TextField()
+    seq = models.ForeignKey(
+            "Sequence",
+            related_name="multi_sequence_alignments",
+            on_delete=models.CASCADE
+            )
+    alignment = models.TextField()
+
+    class Meta:
+        unique_together = ['name', 'family', 'seq']
