@@ -180,3 +180,13 @@ MSA_BY_DOMAIN_ARCHITECTURE.mkdir(parents=True, exist_ok=True)
 
 MSA_BY_DOMAIN_STRIP = MSA_FOLDER / "domain_strip"
 MSA_BY_DOMAIN_STRIP.mkdir(parents=True, exist_ok=True)
+
+TREE_OUT = OUT_FOLDER / "trees"
+TREE_OUT.mkdir(parents=True, exist_ok=True)
+
+NOTUNG_FOLDER = OUT_FOLDER / "notung"
+NOTUNG_FOLDER.mkdir(parents=True, exist_ok=True)
+
+# software
+PROGRAMS_FOLDER = BASE_DIR / "programs"
+NOTUNG_JAR = PROGRAMS_FOLDER / "notung.jar"

@@ -6,3 +6,7 @@ db.sqlite3
 
 data
 out
+
+taxdump.tar.gz
+
+programs/*
