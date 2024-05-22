@@ -20,7 +20,7 @@ class SuperfamilyQuerySet(models.QuerySet):
         return self.filter(number__in=superfamilies)
 
     def annotate_uniprot_count(self) -> models.QuerySet:
-        return self.annotate(uniprot_entries_count=Count('uniprot_entries'))
+        return self.superfamilies().annotate(uniprot_entries_count=Count('uniprot_entries', distinct=True))
 
     def annotate_uniprot_enzyme_ec_count(self) -> models.QuerySet:
         with_ec = Count("uniprot_entries", filter=Q(uniprot_entries__ec_entries__isnull=False))
@@ -29,17 +29,6 @@ class SuperfamilyQuerySet(models.QuerySet):
         no_ec = Count("uniprot_entries", filter=Q(uniprot_entries__ec_entries__isnull=True))
         return self.annotate(uniprot_entries_ec_count=with_ec,
                              uniprot_entries_no_ec_count=no_ec)
-
-    def annotate_single_domain_sequences(self):
-        """return the with a list of sequences that are comprised by this single domain"""
-        return self.filter(uniprot_entries__in=uniprot.Entry.objects.single_domain())\
-            .prefetch_related(
-                Prefetch(
-                    "uniprot_entries",
-                    queryset=uniprot.Entry.objects.single_domain(),
-                    to_attr="single_domain_sequences"
-                    )
-                )
 
 
 class Superfamily(models.Model):
@@ -82,13 +71,15 @@ class Superfamily(models.Model):
 
 class SuperfamilyUniprotEntryQuerySet(models.QuerySet):
 
-    def single_domain_sequences(self):
-        single_domain_sequences = SuperfamilyUniprotEntry.objects\
+    def get_single_domain_sequence_acs(self):
+        return set(SuperfamilyUniprotEntry.objects\
                 .values_list("uniprot_entry_id", flat=True)\
                 .annotate(Count('id'))\
                 .order_by()\
-                .filter(id__count=1)
-        return self.filter(uniprot_entry_id__in=set(single_domain_sequences))
+                .filter(id__count=1))
+    
+    def single_domain_sequences(self):
+        return self.filter(uniprot_entry_id__in=self.get_single_domain_sequence_acs())
 
 class SuperfamilyUniprotEntry(models.Model):
     """through table that links uniprot entries to CATH superfamilies"""
