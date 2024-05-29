@@ -6,8 +6,8 @@ from collections import Counter
 from pseudoenzymes.settings import OUT_FOLDER
 
 def run():
-    # venn_enzyme_annotation()
-    # go_stats()
+    venn_enzyme_annotation()
+    go_stats()
     uniprot_stats()
 
 def uniprot_stats():
@@ -60,13 +60,45 @@ def venn_enzyme_annotation():
     import matplotlib.pyplot as plt
     from matplotlib_venn import venn3_unweighted as venn3
 
-    proteins = uniprot.Entry.objects.all()
+    proteins = uniprot.Entry.objects.reviewed()
+    print("number of proteins in venn diagram", proteins.count())
     ec = set(proteins.enzymes_ec().values_list("ac", flat=True))
     kw = set(proteins.enzymes_kw().values_list("ac", flat=True))
-    go = set(proteins.enzymes_go().values_list("ac", flat=True))
-    no_ez_count = proteins.count() - len(ec|kw|go)
+    gos = set(proteins.enzymes_go().values_list("ac", flat=True))
+    no_ez_count = proteins.count() - len(ec|kw|gos)
     plt.text(0.5, -0.41, f"No catalytic\nannotation\n{no_ez_count}")
     plt.text(0.5, -0.61, f"Total\n{proteins.count()}")
     
-    venn3([ec, kw, go], ('EC Number', 'UniProt Keyword', 'GO Term'))
+    venn3([ec, kw, gos], ('EC Number', 'UniProt Keyword', 'GO Term'))
     plt.savefig(OUT_FOLDER/"venn_annotation.svg")
+
+    # looking into sets
+    ec_kw_not_go = (ec & kw) - gos
+    entries = uniprot.Entry.objects.filter(ac__in=ec_kw_not_go)
+    # what ecs are these?)
+    ec_classes = [n.split(".")[0] for n in  entries.values_list("ec_entries__number", flat=True)]
+    print("ec classes of ec and kw but not go", Counter(ec_classes))
+
+
+    kw_go_not_ec = (gos & kw) - ec
+    entries = uniprot.Entry.objects.filter(ac__in=kw_go_not_ec)
+    catalytic_kw = [kw for kw in entries.values_list("keywords", flat=True)
+                    if kw in uniprot.Keyword.TOP_LEVEL_EZ_KWS]
+    go_terms = list(entries.values_list("go_terms__name", flat=True))
+    # print("go terms", go_terms)
+    all_catalytic_go = set(go.Term.objects.catalytic().values_list("name", flat=True))
+    # print(all_catalytic_go)
+    catalytic_go = [ term for term in go_terms if term in all_catalytic_go ]
+    print("go terms in kw and go but not ec", Counter(catalytic_go))
+    # print(list(entries))
+
+
+    go_only = gos - ec - kw
+    entries = uniprot.Entry.objects.filter(ac__in=go_only)
+    go_terms = list(entries.values_list("go_terms__name", flat=True))
+    catalytic_go = [ term for term in go_terms if term in all_catalytic_go ]
+    print("go terms go only", Counter(catalytic_go))
+    print(list(entries))
+
+
+

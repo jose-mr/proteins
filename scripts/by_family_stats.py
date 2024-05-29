@@ -11,7 +11,7 @@ import uniprot.models as uniprot
 def run():
     # plot_nseqs_by_pc_single_domain()
 
-    plot_nseqs_by_pc_enzymes(enzyme_list="ec")
+    plot_nseqs_by_pc_enzymes(enzyme_list="ec", single_domain_only=True)
 
 def plot_nseqs_by_pc_enzymes(enzyme_list, single_domain_only=True):
     """plot the number of sequences in each family and % of enzymes"""
@@ -74,22 +74,20 @@ def plot_nseqs_by_pc_enzymes(enzyme_list, single_domain_only=True):
             color = "orange"
         else:
             color = "red"
-        print(ec3_count, ec3_count == 1)
 
         if single_domain_only:
             acs &= single_domain_acs
-        if len(acs) > 10:
+        if len(acs) > 20:
             number_of_sequences = len(acs)
-            # pc_single_domain_sequences = len(acs & single_domain_acs) / number_of_sequences
-            pc_enzymes = len(acs & enzymes) / number_of_sequences
+            pc_enzymes = 100 * (len(acs & enzymes) / number_of_sequences)
 
             if math.isclose(0, pc_enzymes):
                 x0.append(number_of_sequences)
-                y0.append(min(-0.01, np.random.normal(loc=-0.1, scale=0.03)))
+                y0.append(min(-1, np.random.normal(loc=-10, scale=2.5)))
                 continue
-            if math.isclose(1, pc_enzymes):
+            if math.isclose(100, pc_enzymes):
                 x1.append(number_of_sequences)
-                y1.append(max(1.01, np.random.normal(loc=1.1, scale=0.03)))
+                y1.append(max(101, np.random.normal(loc=110, scale=2.5)))
                 ec_color1.append(color)
                 continue
             x.append(number_of_sequences)
@@ -98,12 +96,17 @@ def plot_nseqs_by_pc_enzymes(enzyme_list, single_domain_only=True):
 
     print(len(x), len(x0), len(x1))
     fig, ax = plt.subplots()
-    ax.scatter(x, y, alpha=0.5, color=ec_color, s=50)
-    ax.scatter(x0, y0, alpha=0.5, color="white", edgecolors="black", s=50)
-    ax.scatter(x1, y1, alpha=0.5, color=ec_color1, edgecolors="black", s=50)
+    fig.set_size_inches(7,5)
+    ax.scatter(x, y, alpha=0.5, color=ec_color, s=70)
+    ax.scatter(x0, y0, alpha=0.5, color="white", edgecolors="black", s=70)
+    ax.scatter(x1, y1, alpha=0.5, color=ec_color1, edgecolors="black", s=70)
+    ax.set_yticks(np.arange(0, 100.1, 100/5), [">0%", "20%", "40%", "60%", "80%", "<100%"])
     ax.set_xscale("log")
-    # plt.show()
-    plt.savefig("a.png")
+    ax.set_xlabel("Number of proteins in family")
+    ax.set_ylabel("Percentage of enzymes in family")
+    plt.tight_layout()
+    plt.savefig("a.png", dpi=300)
+    plt.show()
 
 
 

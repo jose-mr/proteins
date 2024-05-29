@@ -19,5 +19,11 @@ cd  $SCRIPT_PATH/../data/interpro
 wget -c https://ftp.ebi.ac.uk/pub/databases/interpro/current_release/protein2ipr.dat.gz
 
 # tried with regex to select only patterns at the start of the line but 
-# it used to much ram. this g3d_swissprot_only will have more entries than swissprot
+# it used to0 much ram. this g3d_swissprot_only will have more entries than swissprot
 zgrep G3DSA protein2ipr.dat.gz | grep -f ../uniprot/acs.txt > g3d_swissprot_only.txt
+
+
+# downloading uniprot data for entries associated with pdb")
+#mkdir -p $SCRIPT_PATH/../data/pdb
+#cd  $SCRIPT_PATH/../data/pdb
+#wget -c "https://rest.uniprot.org/uniprotkb/stream?query=((structure_3d:true)+AND+(reviewed:false))&format=txt&compressed=true" > test.dat.gz

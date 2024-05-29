@@ -43,6 +43,7 @@ INSTALLED_APPS = [
     'ec.apps.EcConfig',
     'cath.apps.CathConfig',
     'stats.apps.StatsConfig',
+    'wpdb.apps.WpdbConfig',
     'django_extensions',
     'django_filters',
     'django_tables2'
@@ -167,6 +168,12 @@ CATH_NAMES_FILE = CATH_DATA_FOLDER / "cath-b-newest-names.gz"
 INTERPRO_DATA_FOLDER = DATA_FOLDER / "interpro"
 INTERPRO_DAT_FILE = INTERPRO_DATA_FOLDER / "protein2ipr.dat.gz"
 INTERPRO_ONLY_G3_SP_DAT_FILE = INTERPRO_DATA_FOLDER / "g3d_swissprot_only.txt"
+
+PDB_DATA_FOLDER = DATA_FOLDER / "pdb"
+PDB_DATA_FOLDER.mkdir(parents=True, exist_ok=True)
+PDB_ENTRIES_IDX = PDB_DATA_FOLDER / "entries.idx"
+PDB_UNIPROT_SIFTS = PDB_DATA_FOLDER / "uniprot_pdb.tsv.gz"
+PDB_UNIPROT_DAT_FILE = PDB_DATA_FOLDER / "uniprot_pdb.dat.gz"
 
 # ANALYSIS OUTPUT
 OUT_FOLDER = BASE_DIR / "out"
