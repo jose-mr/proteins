@@ -38,6 +38,24 @@ class TermQuerySet(models.QuerySet):
                        .values_list("id", flat=True))
         return self.filter(id__in=ids)
 
+    def go_graph(self):
+        """return graph representing the relationships among go terms"""
+        import networkx as nx
+        graph = nx.DiGraph()
+        for relation in Relation.objects.filter(relation="is_a"):
+            graph.add_edge(relation.term2_id, relation.term1_id)
+        return graph
+
+    def go_to_ancestors(self):
+        """return dict of go terms pointing to ancestors"""
+        import networkx as nx
+        term_to_ancestors = {}
+        graph = self.go_graph()
+        for term in self:
+            if term.id in graph:
+                term_to_ancestors[term.id] = nx.ancestors(graph, term.id)
+        return term_to_ancestors
+
 
 class Term(models.Model):
     """Gene Ontology Terms"""

@@ -25,7 +25,7 @@ class EntryQuerySet(models.QuerySet):
             return self.exclude(ac__in=enzymes)
 
     def enzymes_go(self, catalytic=True):
-        enzymes = self.filter(go_associations__in=go.TermUniProtEntry.objects.catalytic())
+        # enzymes = self.filter(go_associations__in=go.TermUniProtEntry.objects.catalytic())
 
         catalytic_association = go.TermUniProtEntry.objects.filter(
                 term__in=go.Term.objects.catalytic(),

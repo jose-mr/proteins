@@ -12,7 +12,8 @@ from lxml import etree
 from django.db import models
 
 from pseudoenzymes.settings import (EC_DAT_FILE, EC_CLASSES_FILE, 
-                                    SWISSPROT_DAT_FILE, EC_INTENZ_XML
+                                    SWISSPROT_DAT_FILE, EC_INTENZ_XML,
+                                    PDB_UNIPROT_DAT_FILE
                                     )
 import uniprot.models as uniprot
 
@@ -166,13 +167,14 @@ class EntryUniProtEntry(models.Model):
 
     # objects = SequenceGoQuerySet.as_manager()
 
-    # # noinspection PyMissingOrEmptyDocstring
     class Meta:
         unique_together = ["entry", "uniprot_entry"]
 
+        
+    # TODO join the next two functions into one
     @classmethod
     def create_from_uniprot_dat_file(cls):
-        """find and create all uniprot <-> ec pairs in the dat file
+        """find and create all swissprot <-> ec pairs in the dat file
 
         this file is more complete than the ec dat file from sibs"""
         objs = []
@@ -180,6 +182,28 @@ class EntryUniProtEntry(models.Model):
         uniprot_entries = set(uniprot.Entry.objects.all().values_list("ac", flat=True))
         with gzip.open(SWISSPROT_DAT_FILE, "rb") as dat_file:
             for record in SeqIO.parse(dat_file, "swiss"):
+                for word in record.description.split():
+                    if word.startswith("EC="):
+                        number = word[3:].strip(";")
+                        if number not in entries:
+                            print(number)
+                        if record.id not in uniprot_entries:
+                            print(record.id)
+                        objs.append(cls(entry_id=number, uniprot_entry_id=record.id))
+        print(f"Creating {len(objs)} Uniprot<->EC associations")
+        cls.objects.bulk_create(objs, ignore_conflicts=True)
+
+    @classmethod
+    def create_from_pdb_uniprot_dat_file(cls):
+        """find and create uniprot <-> ec pairs for sequences in pdb but not in swissprot
+
+        this file is more complete than the ec dat file from sibs"""
+        objs = []
+        entries = set(Entry.objects.all().values_list("number", flat=True))
+        uniprot_entries = set(uniprot.Entry.objects.all().values_list("ac", flat=True))
+        with gzip.open(PDB_UNIPROT_DAT_FILE, "rb") as dat_file:
+            for record in SeqIO.parse(dat_file, "swiss"):
+                print(record)
                 for word in record.description.split():
                     if word.startswith("EC="):
                         number = word[3:].strip(";")
