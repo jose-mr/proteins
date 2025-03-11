@@ -41,10 +41,10 @@ def run():
     print("PDBS before 2021: ",  previous_pdbs.count())
     print("PDBS on and after 2021: ",  recent_pdbs.count())
 
-    print("All ECs represent in PDB: ", len(previous_ecs.keys()|recent_ecs.keys()))
-    print("ECs represent in PDB before 2021: ", len(previous_ecs))
-    print("ECs represent in PDB on an after 2021: ", len(recent_ecs))
-    print("ECs represent in PDB exclusively on an after 2021 (new ecs): ", len(recent_only_ecs))
+    print("All ECs represented in PDB: ", len(previous_ecs.keys()|recent_ecs.keys()))
+    print("ECs represented in PDB before 2021: ", len(previous_ecs))
+    print("ECs represented in PDB on an after 2021: ", len(recent_ecs))
+    print("ECs represented in PDB exclusively on an after 2021 (new ecs): ", len(recent_only_ecs))
 
     pdb_id_to_entry = {e.pdb_id: e for e in PdbEntry.objects.all()}
 
@@ -69,5 +69,10 @@ def run():
         for ec, pdbs in (all_ecs).items():
             for pdb_id in pdbs:
                 pdb = pdb_id_to_entry[pdb_id]
+                uniprot_ids = ";".join(list(pdb.uniprot_entries.values_list("ac", flat=True)))
+                cath_superfamilies = set()
+                for uniprot in pdb.uniprot_entries.all():
+                    cath_superfamilies.update(uniprot.cath_superfamilies.values_list("number", flat=True))
+                cath_superfamilies = ";".join(cath_superfamilies)
                 csv_writer.writerow([pdb_id, pdb.title, pdb.date.year, pdb.date, ec, uniprot_ids, cath_superfamilies])
 

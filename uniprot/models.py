@@ -80,23 +80,24 @@ class Entry(models.Model):
     def __str__(self):
         return self.ac
     
-    @classmethod
-    def download_pdb_dat_file(cls):
-        """get the dat file for the accession codes in the list
-        it is used to get entries associated with PDBs that are not in uniprot"""
+    # this is done in get_large_files
+    # @classmethod
+    # def download_pdb_dat_file(cls):
+        # """get the dat file for the accession codes in the list
+        # it is used to get entries associated with PDBs that are not in swissprot"""
 
-        print("downloading uniprot data for entries associated with pdb")
-        url = ("https://rest.uniprot.org/uniprotkb/search?query=((structure_3d:true)"
-               "+AND+(reviewed:false))&compressed=true&format=txt&size=500")
+        # print("downloading uniprot data for entries associated with pdb")
+        # url = ("https://rest.uniprot.org/uniprotkb/search?query=((structure_3d:true)"
+               # "+AND+(reviewed:false))&compressed=true&format=txt&size=500")
         
-        with open(PDB_UNIPROT_DAT_FILE, "wb") as out_file:
-            while True:
-                with urllib.request.urlopen(url) as result:
-                    out_file.write(result.read())
-                    link = result.getheader("Link")
-                    if link is None:
-                        break
-                    url = link.split(";")[0][1:-1]
+        # with open(PDB_UNIPROT_DAT_FILE, "wb") as out_file:
+            # while True:
+                # with urllib.request.urlopen(url) as result:
+                    # out_file.write(result.read())
+                    # link = result.getheader("Link")
+                    # if link is None:
+                        # break
+                    # url = link.split(";")[0][1:-1]
 
     @classmethod
     def create_from_dat_file(cls, filename=SWISSPROT_DAT_FILE, swissprot=True):
@@ -142,20 +143,26 @@ class Entry(models.Model):
                 seqs_to_create.append(Sequence(seq=record.seq))
                 existing_seqs.add(record.seq)
         Sequence.objects.bulk_create(seqs_to_create) 
+        print("Created sequence objects")
         seq2id = {seq.seq: seq.id for seq in Sequence.objects.all()}
 
         for record in records:
             # prepare keyword through objects
-            keywords = record.annotations.get("keywords", [])
-            keywords = [kw.lower() for kw in keywords]
+            keywords = [kw.lower() for kw in record.annotations.get("keywords", [])]
 
-            # this is necessary because keywords sometimes are not cleaned up properly
-            # this happens when the dat file comes from the api
-            keywords = [k[:k.find("{eco")+1].strip("{").strip() for k in keywords
-                        if not (k.startswith("eco:") or k.startswith("rule:") or k.startswith("prorule:"))]
-            keywords = [k for k in keywords if k]
-            # above should not be necessary if biopython fixes this
-            print(keywords)
+            # some cleanup is necessary for the non reviewed dataset, which comes from the rest api
+            # biopython does not divide the keywords correctly if they contain braces
+            clean_kws = []
+            if not swissprot:
+                for kw in keywords:
+                    if kw.startswith("eco:") or kw.startswith("prorule:") or kw.startswith("rule:"):
+                        continue
+                    else:
+                        if "eco:" in kw:
+                            kw = kw[:kw.find(" {eco:")]
+                        if kw and not kw.endswith("}"):
+                            clean_kws.append(kw)
+                keywords = clean_kws
 
             entry_keyword_through_objs.extend([
                 cls.keywords.through(entry_id=record.id, keyword_id=kw)
@@ -180,6 +187,7 @@ class Entry(models.Model):
 
         kw_existing = set(Keyword.objects.all().values_list("name", flat=True))
         kw_to_create = kw_to_create - kw_existing
+        print(kw_to_create)
         kw_to_create = [Keyword(kw) for kw in kw_to_create]
         kw_created = Keyword.objects.bulk_create(kw_to_create)
         print(f"Created {len(kw_created)} Keywords")
