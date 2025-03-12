@@ -9,42 +9,42 @@ import wpdb.models as wpdb
 def run():
     """run this script to generate the pseudoenzyme datasets"""
 
-    # # Delete all UniProt previous entries
-    Entry.objects.all().delete()
-    Keyword.objects.all().delete()
+    # # # Delete all UniProt previous entries
+    # Entry.objects.all().delete()
+    # Keyword.objects.all().delete()
     
-    # SwissProt
-    # Add all swissprot entries and keyword associations
-    Entry.create_from_dat_file()
+    # # SwissProt
+    # # Add all swissprot entries and keyword associations
+    # Entry.create_from_dat_file()
 
-    # PDB
-    wpdb.Entry.objects.all().delete()
-    wpdb.Entry.download_entries_idx()
-    wpdb.Entry.create_from_entries_idx_file()
+    # # PDB
+    # wpdb.Entry.objects.all().delete()
+    # wpdb.Entry.download_entries_idx()
+    # wpdb.Entry.create_from_entries_idx_file()
 
-    # add UniProt in PDBs
-    Entry.objects.filter(reviewed=False).delete()
-    # Add information about these uniprot entries to the database
-    Entry.create_from_pdb_dat_file()
-    #  add all uniprot entries associated with a PDB and their keywords
-    wpdb.EntryUniProtEntry.download_uniprot_pdb_sifts()
-    wpdb.EntryUniProtEntry.objects.all().delete()
-    wpdb.EntryUniProtEntry.create_from_uniprot_pdb_sifts()
+    # # add UniProt in PDBs
+    # Entry.objects.filter(reviewed=False).delete()
+    # # Add information about these uniprot entries to the database
+    # Entry.create_from_pdb_dat_file()
+    # #  add all uniprot entries associated with a PDB and their keywords
+    # wpdb.EntryUniProtEntry.download_uniprot_pdb_sifts()
+    # wpdb.EntryUniProtEntry.objects.all().delete()
+    # wpdb.EntryUniProtEntry.create_from_uniprot_pdb_sifts()
 
-    # Gene Ontology
-    go.Term.download_ontology()
-    go.Term.objects.all().delete()
-    go.Term.create_from_ontology_file()
+    # # Gene Ontology
+    # go.Term.download_ontology()
+    # go.Term.objects.all().delete()
+    # go.Term.create_from_ontology_file()
 
-    go.Relation.objects.all().delete()
-    go.Relation.create_from_ontology_file()
+    # go.Relation.objects.all().delete()
+    # go.Relation.create_from_ontology_file()
 
 
-    # eco ontology
-    eco.Term.download_ontology()
-    eco.Term.objects.all().delete()
-    eco.Term.create_from_ontology_file()
-    eco.Relation.create_from_ontology_file()
+    # # eco ontology
+    # eco.Term.download_ontology()
+    # eco.Term.objects.all().delete()
+    # eco.Term.create_from_ontology_file()
+    # eco.Relation.create_from_ontology_file()
 
 
     # link ontologies to uniprot entries
