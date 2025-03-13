@@ -19,7 +19,8 @@ numpy==1.26.4
 packaging==24.0
 pillow==10.3.0
 psycopg2-binary==2.9.10
-pygraphviz==1.12
+pygraphviz==1.14
+pygraphviz-bin==0.0.1.2251946352
 pymemcache==4.0.0
 pyparsing==3.1.2
 PyQt5==5.15.10
