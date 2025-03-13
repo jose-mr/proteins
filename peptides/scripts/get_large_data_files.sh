@@ -7,7 +7,7 @@ cd  $SCRIPT_PATH/../../data/peptides/uniprot
 
 # download peptide information
 echo "downloading peptide information from Uniprot"
-wget -O uniprot_peptides.dat.gz "https://rest.uniprot.org/uniprotkb/stream?format=txt&compressed=true&query=%28length%3A%5B10+TO+20%5D%29"
+wget -O uniprot_peptides.dat.gz "https://rest.uniprot.org/uniprotkb/stream?format=txt&compressed=true&query=%28length%3A%5B10+TO+50%5D%29"
 
 # create a file with all the swissprot acs to filter the big dat files
 echo "create files with all peptide accession codes in uniprot"

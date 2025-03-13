@@ -155,14 +155,15 @@ class Entry(models.Model):
         print(f"Creating {len(to_create)} new UniProt entries")
         created = cls.objects.bulk_create(to_create)
 
-        print(f"Updating {len(to_update)} UniProt Entries)")
-        cls.objects.bulk_update(to_update, fields=["comment", "reviewed", "secondary_ac"])
+        print(f"Updating {len(to_update)} UniProt Entries")
+        # TODO this is to slow, need to compare first and only update what is necessary
+        # cls.objects.bulk_update(to_update, fields=["comment", "reviewed", "secondary_ac"])
 
         # Add new keywords
         existing_kws = set(Keyword.objects.all().values_list("name", flat=True))
         kw_to_create = kws_records - existing_kws
         print(f"Creating {len(kw_to_create)} new Keywords")
-        Keyword.objects.bulk_create(kw_to_create)
+        Keyword.objects.bulk_create([Keyword(name=kw) for kw in kw_to_create])
 
         print(f"Creating {len(entry_keywords)} new UniProt - Keywords relations")
         cls.keywords.through.objects.bulk_create(entry_keywords)
