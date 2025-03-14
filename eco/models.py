@@ -59,13 +59,15 @@ class Term(models.Model):
     @classmethod
     def create_from_ontology_file(cls):
         """Reads the ontology file and adds all the ECO terms to the database"""
+        existing = set(cls.objects.values_list("id", flat=True))
         inside_quotes = re.compile(r'"[^"\\]*(?:\\.[^"\\]*)*"')
         objs = []
         info = {}
         with open(ECO_ONTOLOGY_FILE, 'r') as obo_file:
             for line in obo_file:
                 if line == "\n" and "id" in info:
-                    objs.append(cls(**info))
+                    if info["id"] not in existing:
+                        objs.append(cls(**info))
                     info = {}
                 elif line.startswith("id: ECO:"):
                     info["id"] = line.strip().replace("id: ECO:", "")
@@ -104,6 +106,7 @@ class Relation(models.Model):
     @classmethod
     def create_from_ontology_file(cls):
         """read the ontology file and add all the is_a ECO relations to the database"""
+        existing = set(cls.objects.values_list("term1", "relation", "term2"))
         objs = []
         with open(ECO_ONTOLOGY_FILE, 'r') as obo_file:
             term1 = None
@@ -114,7 +117,8 @@ class Relation(models.Model):
                     term1 = line.replace("id: ECO:", "").strip()
                 elif line.startswith("is_a: ECO:") and term1 not in [None, "reading"]:
                     term2 = line.replace("is_a: ECO:", "").split("!")[0].split("{")[0].strip()
-                    objs.append(cls(term1_id=term1, term2_id=term2, relation="is_a"))
+                    if (term1, "is_a", term2) not in existing:
+                        objs.append(cls(term1_id=term1, term2_id=term2, relation="is_a"))
                 elif line == "\n":
                     term1 = None
         cls.objects.bulk_create(objs)

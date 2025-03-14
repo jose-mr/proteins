@@ -35,6 +35,7 @@ class Entry(models.Model):
     @classmethod
     def create_from_entries_idx_file(cls):
         """Reads entries.idx file and adds new pdb entries to the table"""
+        existing = set(cls.objects.values_list("pdb_id", flat=True))
         to_create = []
         with open(PDB_ENTRIES_IDX, 'r') as pdb_idx_file:
             next(pdb_idx_file)
@@ -47,9 +48,11 @@ class Entry(models.Model):
                 date = f"{year_prefix}{year}-{month}-{day}"
                 title = words[3].lower()
                 method = words[7].lower()
-                to_create.append(cls(
-                    pdb_id=pdb_id, title=title, date=date, method=method))
+                if pdb_id not in existing:
+                    to_create.append(cls(
+                        pdb_id=pdb_id, title=title, date=date, method=method))
 
+        print(f"Addding {len(to_create)} new PDB entries")
         cls.objects.bulk_create(to_create)
 
 
@@ -404,6 +407,7 @@ class EntryUniProtEntry(models.Model):
     @classmethod
     def create_from_uniprot_pdb_sifts(cls):
         """Add uniprot - pdb associations"""
+        existing = set(cls.objects.values_list("uniprot_entry_id", "pdb_entry_id"))
         ac_to_pdb = {}
         with gzip.open(PDB_UNIPROT_SIFTS, 'rt') as uniprot_pdb_file:
             next(uniprot_pdb_file)
@@ -414,19 +418,18 @@ class EntryUniProtEntry(models.Model):
 
 
         db_acs = set(uniprot.Entry.objects.values_list("pk", flat=True))
-        to_create = []
-        not_in_uniprot = set()
+        in_sifts = set()
         missing_uniprot = ac_to_pdb.keys() - db_acs
-        print(f"{len(not_in_uniprot)} PDBs not yet recognised in the UniProt dat")
+        # newer uniprot ids might not be in the uniprot dat file yet
+        # ading them here
+        print(f"{len(missing_uniprot)} missing UniProt")
         uniprot.Entry.create_from_ac_list(missing_uniprot)
 
         for ac, pdbs in ac_to_pdb.items():
-            # newer pdbs will not be in the uniprot dat file yet
             if ac in db_acs:
                 for pdb_id in pdbs:
-                    to_create.append(cls(uniprot_entry_id=ac, pdb_entry_id=pdb_id))
-            else:
-                not_in_uniprot.update(pdbs)
-
+                    in_sifts.add((ac, pdb_id))
+        to_create = in_sifts - existing
+        objs_to_create = [cls(uniprot_entry_id=ac, pdb_entry_id=pdb_id) for ac, pdb_id in to_create]
         print(f"Creating {len(to_create)} pdb-uniprot associations")
-        cls.objects.bulk_create(to_create)
+        cls.objects.bulk_create(objs_to_create)

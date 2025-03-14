@@ -151,6 +151,7 @@ DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 DATA_FOLDER = BASE_DIR / "data"
 SWISSPROT_DAT_FILE = DATA_FOLDER / "uniprot/uniprot_sprot.dat.gz"
 SWISSPROT_ACS_FILE = DATA_FOLDER / "uniprot/acs.txt"
+PEPTIDES_DAT_FILE = DATA_FOLDER / "peptides/uniprot/uniprot_peptides.dat.gz"
 
 GO_DATA_FOLDER = DATA_FOLDER / "go"
 GO_DATA_FOLDER.mkdir(parents=True, exist_ok=True)

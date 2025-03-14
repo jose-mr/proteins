@@ -92,12 +92,14 @@ class Term(models.Model):
     def create_from_ontology_file(cls):
         """Reads the ontology file and adds all GO terms to the database"""
         inside_quotes = re.compile(r'"[^"\\]*(?:\\.[^"\\]*)*"')
+        existing = set(cls.objects.values_list("id", flat=True))
         objs = []
         with open(GENE_ONTOLOGY_FILE, 'r') as obo_file:
             info = {}
             for line in obo_file:
                 if line == "\n" and "id" in info:
-                    objs.append(cls(**info))
+                    if info["id"] not in existing:
+                        objs.append(cls(**info))
                     info = {}
                 elif line.startswith("id: GO:"):
                     info["id"] = int(line.replace("id: GO:", ""))
@@ -144,6 +146,8 @@ class Relation(models.Model):
     @transaction.atomic
     def create_from_ontology_file(cls):
         """Read the ontology file and add all the is_a GO relations to the database"""
+        # TODO remove old relations
+        existing = set(cls.objects.values_list("term1", "relation", "term2"))
         objs = []
         with open(GENE_ONTOLOGY_FILE, 'r') as obo_file:
             term1 = None
@@ -154,7 +158,8 @@ class Relation(models.Model):
                     term1 = int(line.replace("id: GO:", ""))
                 elif line.startswith("is_a") and term1:
                     term2 = int(line.replace("is_a: GO:", "").split("!")[0])
-                    objs.append(cls(term1_id=term1,term2_id=term2, relation="is_a"))
+                    if (term1, "is_a", term2) not in existing:
+                        objs.append(cls(term1_id=term1,term2_id=term2, relation="is_a"))
                 elif line == "\n":
                     term1 = None
         cls.objects.bulk_create(objs)
@@ -226,6 +231,10 @@ class TermUniProtEntry(models.Model):
                     if uniprot_id in acs:
                         qualifier = words[2]
                         term = int(words[3].split(":")[1])
+                        if term not in terms:
+                            print("(skipping) term not found", term, line)
+                            # if just a couple of missing terms, is probably a new annotation
+                            continue
                         eco_term = words[5].split(":")[1].strip()
                         info.add((term, uniprot_id, qualifier, eco_term))
         return info

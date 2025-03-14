@@ -1,10 +1,11 @@
 import gzip
 from urllib.request import urlretrieve
 import urllib.request
+import hashlib
 
 from Bio import SeqIO, SwissProt
 
-from django.db.models import Q, Count
+from django.db.models import Q, Count, Func
 from django.db.models.functions import Length
 from django.db import models, transaction
 from pseudoenzymes.settings import SWISSPROT_DAT_FILE, SWISSPROT_ACS_FILE, PDB_UNIPROT_DAT_FILE
@@ -17,7 +18,7 @@ class EntryQuerySet(models.QuerySet):
 
     def peptides(self, max_length=50):
         qs = self.annotate(seq_length=Length("seq__seq"))
-        return qs.filter(seq_length__lt=max_length)
+        return qs.filter(seq_length__lte=max_length)
 
     def enzymes_ec(self, catalytic=True):
         return self.filter(ec_entries__isnull=not(catalytic))
@@ -103,11 +104,16 @@ class Entry(models.Model):
         """create entries from a list of accessions.
         This is very slow use only for a small number of entries"""
         records = []
+        batch_size = 100
         for i, ac in enumerate(acs):
             url = f"https://rest.uniprot.org/uniprotkb/{ac}.txt"
             with urllib.request.urlopen(url) as result:
-                biorecord = SeqIO.parse(result, format="swiss")
+                biorecord = SwissProt.parse(result)
                 records.extend([r for r in biorecord])
+            if len(records) == batch_size:
+                cls.create_from_records(records)
+                records = []
+                print(".", end="")
         cls.create_from_records(records)
 
     @classmethod
@@ -116,10 +122,14 @@ class Entry(models.Model):
         print(f"Creating entries from {len(records)} records")
    
         # Add new Sequence objects
-        existing_seqs = set(Sequence.objects.values_list("seq", flat=True))
-        new_seqs = {record.sequence for record in records} - existing_seqs
-        print(f"Creating {len(new_seqs)} new sequence objects")
-        Sequence.objects.bulk_create([Sequence(seq=seq) for seq in new_seqs])
+        existing_seqs = set(Sequence.objects.values_list("seq_hash", flat=True))
+        to_create = []
+        for record in records:
+            if (seq_hash := get_seq_hash(record.sequence)) not in existing_seqs:
+                to_create.append(Sequence(seq=record.sequence, seq_hash=seq_hash))
+                existing_seqs.add(seq_hash)
+        print(f"Creating {len(to_create)} new sequence objects")
+        Sequence.objects.bulk_create(to_create)
         seq2id = {seq.seq: seq.id for seq in Sequence.objects.all()}
 
         to_create = []
@@ -208,8 +218,13 @@ class Keyword(models.Model):
 
     objects = KeywordQuerySet.as_manager()
 
+class MD5(Func):
+    function = "MD5"
+    template = "%(function)s(%(expressions)s)"
+
 class Sequence(models.Model):
-    seq = models.TextField(unique=True)
+    seq = models.TextField()
+    seq_hash = models.CharField(max_length=32, unique=True, editable=False)
 
 class MultiSequenceAlignment(models.Model):
     name = models.TextField()
@@ -242,3 +257,7 @@ def clean_kws_from_record(record):
             if kw and not kw.endswith("}"):
                 clean_kws.append(kw)
     return clean_kws
+
+
+def get_seq_hash(seq):
+    return hashlib.md5(seq.encode("utf-8")).hexdigest()
