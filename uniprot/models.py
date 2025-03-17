@@ -10,6 +10,7 @@ from django.db.models.functions import Length
 from django.db import models, transaction
 from pseudoenzymes.settings import SWISSPROT_DAT_FILE, SWISSPROT_ACS_FILE, PDB_UNIPROT_DAT_FILE
 import go.models as go
+import taxonomy.models as taxonomy
 
 class EntryQuerySet(models.QuerySet):
 
@@ -74,12 +75,15 @@ class Entry(models.Model):
     )
     name = models.TextField()
     comment = models.TextField()
-    taxid = models.IntegerField(
-            verbose_name="NCBI TaxId"
-    )
     keywords = models.ManyToManyField("Keyword", related_name="entries")
-    seq = models.ForeignKey("sequence", related_name="uniprot_entries", on_delete=models.PROTECT)
     reviewed = models.BooleanField(default=True)
+    seq = models.ForeignKey("sequence", related_name="uniprot_entries", on_delete=models.PROTECT)
+    species = models.ForeignKey(
+            "taxonomy.Taxon",
+            related_name="uniprot_entries",
+            null=True,
+            on_delete=models.SET_NULL
+    )
 
     objects = EntryQuerySet.as_manager()
 
@@ -131,6 +135,8 @@ class Entry(models.Model):
         print(f"Creating {len(to_create)} new sequence objects")
         Sequence.objects.bulk_create(to_create)
         seq2id = {seq.seq: seq.id for seq in Sequence.objects.all()}
+        # this is needed to include alternative tax ids
+        old_to_new_taxid = taxonomy.Taxon.objects.all().old_to_new()
 
         to_create = []
         to_update = []
@@ -152,7 +158,7 @@ class Entry(models.Model):
                 ac=ac,
                 name=record.entry_name,
                 seq_id=seq2id[record.sequence],
-                taxid=int(record.taxonomy_id[0]),
+                species=old_to_new_taxid.get(int(record.taxonomy_id[0]), None),
                 secondary_ac=record.accessions[1:],
                 comment=record.comments,
                 reviewed=record.data_class=="Reviewed",

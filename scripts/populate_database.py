@@ -1,15 +1,21 @@
 
+from django.db import transaction
+from django.db.models import F
 from uniprot.models import Entry, Keyword, Sequence
 import go.models as go
 import eco.models as eco
 import ec.models as ec
 import cath.models as cath
 import wpdb.models as wpdb
+import taxonomy.models as taxonomy
 from pseudoenzymes.settings import SWISSPROT_DAT_FILE, PDB_UNIPROT_DAT_FILE, PEPTIDES_DAT_FILE
 
 
 def run():
     """run this script to generate the pseudoenzyme datasets"""
+    # taxonomy
+    # taxonomy.Taxon.download_taxdump_from_ncbi()
+    # taxonomy.Taxon.create_from_ncbi_files()
 
     # SwissProt
     # Add all swissprot entries and keyword associations
@@ -40,11 +46,12 @@ def run():
     # eco.Relation.create_from_ontology_file()
 
 
-    # TODO from here
-    # # link ontologies to uniprot entries
-    go.TermUniProtEntry.create_from_gpa_file()
+    # link ontologies to uniprot entries
+    # go.TermUniProtEntry.create_from_gpa_file()
 
-    # taxonomy
+
+    # TODO go here
+
 
 
 

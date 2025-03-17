@@ -1,5 +1,6 @@
 
 from uniprot.models import Entry
+from taxonomy.models import Taxon
 
 
 
@@ -27,6 +28,7 @@ def run():
     print("Example peptide seq:", example_peptide.seq.seq)
     print("Example peptide sequence length:", example_peptide.seq_length)
     print("Example peptide in swissprot?", example_peptide.reviewed)
+    print("Example petide species",  example_peptide.species)
 
     # get all the peptides with a pdb structure
     # important to use distinct when filtering with other tables data
@@ -38,6 +40,21 @@ def run():
     peptide_with_structure = with_structure.first()
     for pdb in peptide_with_structure.pdb_entries.all():
         print(peptide_with_structure.ac, pdb.pdb_id)
+
+    # species
+    # Get all peptides of a certain species
+    species = Taxon.objects.get(taxid=39947)
+    print(species)
+    rice_peptides = peptides.filter(species=species).distinct()
+    print("number of rice peptides", rice_peptides.count())
+
+    # can be used to find proteins in groups of species
+    bacteria_domain_queryset = Taxon.objects.filter(taxid=2)
+    all_bacteria = Taxon.objects.children_of(bacteria_domain_queryset)
+    print("All bacteria taxa", all_bacteria.distinct().count())
+    bacteria_peptides = peptides.filter(species__in=all_bacteria).distinct()
+    print("number of bacteria peptides", bacteria_peptides.count())
+
 
 
 

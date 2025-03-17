@@ -45,6 +45,7 @@ INSTALLED_APPS = [
     'cath.apps.CathConfig',
     'stats.apps.StatsConfig',
     'wpdb.apps.WpdbConfig',
+    'taxonomy.apps.TaxonomyConfig',
     'django_extensions',
     'django_filters',
     'django_tables2'
@@ -181,6 +182,13 @@ PDB_DATA_FOLDER.mkdir(parents=True, exist_ok=True)
 PDB_ENTRIES_IDX = PDB_DATA_FOLDER / "entries.idx"
 PDB_UNIPROT_SIFTS = PDB_DATA_FOLDER / "uniprot_pdb.tsv.gz"
 PDB_UNIPROT_DAT_FILE = PDB_DATA_FOLDER / "uniprot_pdb.dat.gz"
+
+NCBI_FOLDER = DATA_FOLDER / "ncbi"
+NCBI_FOLDER.mkdir(exist_ok=True)
+NCBI_TAXDUMP_FILE = NCBI_FOLDER / "taxdump.tar.gz"
+NCBI_NAMES_FILE = NCBI_FOLDER / "names.dmp"
+NCBI_NODES_FILE = NCBI_FOLDER / "nodes.dmp"
+NCBI_MERGED_FILE = NCBI_FOLDER / "merged.dmp"
 
 # ANALYSIS OUTPUT
 OUT_FOLDER = BASE_DIR / "out"
