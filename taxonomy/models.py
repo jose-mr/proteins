@@ -80,7 +80,7 @@ class Taxon(models.Model):
                 taxid = int(taxid)
                 if name_class == "scientific name":
                     info[taxid]["name"] = name
-                    info[taxid]["old"] = []
+                    info[taxid]["old_taxids"] = []
                 elif name_class == "genbank common name":
                     info[taxid]["common_name"] = name
 
@@ -94,9 +94,11 @@ class Taxon(models.Model):
 
         with open(NCBI_MERGED_FILE, "rt") as merged_file:
             for line in merged_file:
-                old,  new = [int(word.strip()) for word in line.split("|")[:2]]
+                old, new = [int(word.strip()) for word in line.split("|")[:2]]
                 info[new]["old_taxids"].append(old)
 
-        to_create = [cls(taxid=taxid,**v) for taxid, v in info.items() if taxid not in existing]
+        to_create = [cls(taxid=taxid,**v) for taxid, v in info.items()
+                     if taxid not in existing]
+
         print(f"Creating {len(to_create)} new Taxon objects")
-        cls.objects.bulk_create(to_create, batch_size=100000)
+        cls.objects.bulk_create(to_create, batch_size=10000)

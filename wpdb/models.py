@@ -416,14 +416,10 @@ class EntryUniProtEntry(models.Model):
                 words = line.strip().split("\t")
                 ac_to_pdb[words[0]] = words[1].split(";")
 
-
-        db_acs = set(uniprot.Entry.objects.values_list("pk", flat=True))
+        db_acs = set(uniprot.Entry.objects.filter(pk__in=ac_to_pdb).values_list("pk", flat=True))
         in_sifts = set()
         missing_uniprot = ac_to_pdb.keys() - db_acs
-        # newer uniprot ids might not be in the uniprot dat file yet
-        # ading them here
         print(f"{len(missing_uniprot)} missing UniProt")
-        uniprot.Entry.create_from_ac_list(missing_uniprot)
 
         for ac, pdbs in ac_to_pdb.items():
             if ac in db_acs:

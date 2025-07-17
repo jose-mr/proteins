@@ -1,16 +1,24 @@
 import gzip
 from urllib.request import urlretrieve
+from itertools import islice
 import urllib.request
 import hashlib
 
 from Bio import SeqIO, SwissProt
+from Bio.SeqFeature import UnknownPosition
 
+from django.db import models, transaction
 from django.db.models import Q, Count, Func
 from django.db.models.functions import Length
-from django.db import models, transaction
-from pseudoenzymes.settings import SWISSPROT_DAT_FILE, SWISSPROT_ACS_FILE, PDB_UNIPROT_DAT_FILE
 import go.models as go
 import taxonomy.models as taxonomy
+
+class Sequence(models.Model):
+    seq = models.TextField()
+    seq_hash = models.CharField(max_length=32, unique=True, editable=False)
+
+def get_seq_hash(seq):
+    return hashlib.md5(seq.encode("utf-8")).hexdigest()
 
 class EntryQuerySet(models.QuerySet):
 
@@ -84,6 +92,7 @@ class Entry(models.Model):
             null=True,
             on_delete=models.SET_NULL
     )
+    features = models.JSONField()
 
     objects = EntryQuerySet.as_manager()
 
@@ -91,106 +100,93 @@ class Entry(models.Model):
         return self.ac
     
     @classmethod
-    def create_from_dat_file(cls, filename):
-        """Create all UniProt entries from a uniprot dat_gz file"""
+    def create_from_dat_file(cls, filename, skip_first=0):
+        """Create all UniProt entries from a uniprot dat_gz file does not update old entries"""
         batch_size = 100000
+
+        taxid_map = taxonomy.Taxon.objects.all().old_to_new()
         with gzip.open(filename, "rb") as dat_file:
             records = []
-            for record in SwissProt.parse(dat_file):
-                records.append(record)
-                if len(records) == batch_size:
-                    cls.create_from_records(records)
+            for no, record in enumerate(islice(SwissProt.parse(dat_file), skip_first, None)):
+                if no > 0 and (no % batch_size) == 0:
+                    cls.create_from_records(records, taxid_map)
                     records = []
-            cls.create_from_records(records)
+                records.append(record)
+            cls.create_from_records(records, taxid_map)
 
     @classmethod
-    def create_from_ac_list(cls, acs):
-        """create entries from a list of accessions.
-        This is very slow use only for a small number of entries"""
-        records = []
-        batch_size = 100
-        for i, ac in enumerate(acs):
-            url = f"https://rest.uniprot.org/uniprotkb/{ac}.txt"
-            with urllib.request.urlopen(url) as result:
-                biorecord = SwissProt.parse(result)
-                records.extend([r for r in biorecord])
-            if len(records) == batch_size:
-                cls.create_from_records(records)
-                records = []
-                print(".", end="")
-        cls.create_from_records(records)
-
-    @classmethod
-    def create_from_records(cls, records):
+    @transaction.atomic
+    def create_from_records(cls, records,taxid_map):
         "create UniProt objects biopython record objects"
         print(f"Creating entries from {len(records)} records")
-   
-        # Add new Sequence objects
-        existing_seqs = set(Sequence.objects.values_list("seq_hash", flat=True))
-        to_create = []
-        for record in records:
-            if (seq_hash := get_seq_hash(record.sequence)) not in existing_seqs:
-                to_create.append(Sequence(seq=record.sequence, seq_hash=seq_hash))
-                existing_seqs.add(seq_hash)
-        print(f"Creating {len(to_create)} new sequence objects")
-        Sequence.objects.bulk_create(to_create)
-        seq2id = {seq.seq: seq.id for seq in Sequence.objects.all()}
-        # this is needed to include alternative tax ids
-        old_to_new_taxid = taxonomy.Taxon.objects.all().old_to_new()
 
+        # checking for existing objects is done inside the function to save memory
+        # skipping existing entries
+        ac2rec = {rec.accessions[0]: rec for rec in records}
+        existing_acs = set(cls.objects.filter(ac__in=ac2rec).values_list("ac", flat=True))
+        records = [rec for ac, rec in ac2rec.items() if ac not in existing_acs]
+        print(f"Records not in db: {len(records)}")
+   
+        # adding missing sequence objects
+        hex2rec = {get_seq_hash(rec.sequence): rec for rec in records}
+        hex2id = {t[0]: t[1] for t in Sequence.objects.filter(seq_hash__in=hex2rec)\
+            .values_list("seq_hash","id")}
+        seq_created = Sequence.objects.bulk_create(
+                [Sequence(seq=rec.sequence, seq_hash=seq_hash) for seq_hash, rec in
+                 hex2rec.items() if seq_hash not in hex2id],
+                batch_size=10000
+        )
+        hex2id.update({ seq.seq_hash: seq.pk for seq in seq_created})
+        print(f"{len(seq_created)} new sequence objects created")
+
+        # now adding the uniprot entries
         to_create = []
-        to_update = []
-        kws_records = set()
+        kw_recs = set()
         entry_keywords = []
-        existing_entry_kws = set(cls.keywords.through.objects.all().values_list("entry_id", "keyword_id"))
-        existing_entries = set(cls.objects.all().values_list("ac", flat=True))
+        print("looping over records")
         for record in records:
             ac = record.accessions[0]
             keywords = clean_kws_from_record(record)
-            kws_records.update(keywords)
+            kw_recs.update(keywords)
 
             # prepare keyword through objects
             for kw in keywords:
-                if (record.accessions[0], kw) not in existing_entry_kws:
-                    entry_keywords.append(cls.keywords.through(entry_id=ac, keyword_id=kw))
+                entry_keywords.append(cls.keywords.through(entry_id=ac, keyword_id=kw))
+            
+            features = [
+                    {
+                        "location": [
+                            f.location.start if not isinstance(f.location.start, UnknownPosition) else None, 
+                            f.location.end if not isinstance(f.location.end, UnknownPosition) else None, 
+                            ],
+                        "type": f.type,
+                        "qualifiers": f.qualifiers
+                    }
+                    for f in record.features]
 
             obj = cls(
                 ac=ac,
                 name=record.entry_name,
-                seq_id=seq2id[record.sequence],
-                species=old_to_new_taxid.get(int(record.taxonomy_id[0]), None),
+                seq_id=hex2id[get_seq_hash(record.sequence)],
+                species_id=taxid_map.get(int(record.taxonomy_id[0]), None),
                 secondary_ac=record.accessions[1:],
                 comment=record.comments,
+                features=features,
                 reviewed=record.data_class=="Reviewed",
             )
-            if obj.ac not in existing_entries:
-                to_create.append(obj)
-            else:
-                to_update.append(obj)
+            to_create.append(obj)
 
         print(f"Creating {len(to_create)} new UniProt entries")
-        created = cls.objects.bulk_create(to_create)
-
-        print(f"Updating {len(to_update)} UniProt Entries")
-        # TODO this is to slow, need to compare first and only update what is necessary
-        # cls.objects.bulk_update(to_update, fields=["comment", "reviewed", "secondary_ac"])
+        cls.objects.bulk_create(to_create, batch_size=5000)
 
         # Add new keywords
-        existing_kws = set(Keyword.objects.all().values_list("name", flat=True))
-        kw_to_create = kws_records - existing_kws
-        print(f"Creating {len(kw_to_create)} new Keywords")
-        Keyword.objects.bulk_create([Keyword(name=kw) for kw in kw_to_create])
+        db_kws = set(Keyword.objects.filter(name__in=kw_recs).values_list("name", flat=True))
+        Keyword.objects.bulk_create([Keyword(name=kw) for kw in kw_recs if kw not in db_kws])
 
         print(f"Creating {len(entry_keywords)} new UniProt - Keywords relations")
-        cls.keywords.through.objects.bulk_create(entry_keywords)
-        return created
+        cls.keywords.through.objects.bulk_create(entry_keywords, batch_size=10000)
+        print(f"Done creating {len(to_create)} records and related annotations")
 
-    @classmethod
-    def dump_all_acs(cls):
-        "write all primary acs and secondary acs into a file"
-        acs = cls.objects.values_list("ac", flat=True)
-        with open(SWISSPROT_ACS_FILE, "w") as acs_file:
-            acs_file.writelines(acs)
 
     @property
     def catalytic_activities(self):
@@ -228,10 +224,6 @@ class MD5(Func):
     function = "MD5"
     template = "%(function)s(%(expressions)s)"
 
-class Sequence(models.Model):
-    seq = models.TextField()
-    seq_hash = models.CharField(max_length=32, unique=True, editable=False)
-
 class MultiSequenceAlignment(models.Model):
     name = models.TextField()
     family = models.TextField()
@@ -265,5 +257,3 @@ def clean_kws_from_record(record):
     return clean_kws
 
 
-def get_seq_hash(seq):
-    return hashlib.md5(seq.encode("utf-8")).hexdigest()

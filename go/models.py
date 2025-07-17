@@ -5,11 +5,12 @@
 import gzip
 import re
 from urllib.request import urlretrieve
+import csv
 
 # django imports
-from django.db import models, transaction
+from django.db import models, transaction, connection
 
-from pseudoenzymes.settings import GENE_ONTOLOGY_FILE, GO_GPA_FILE
+from pseudoenzymes.settings import GENE_ONTOLOGY_FILE, GO_GPA_FILE, GO_GPA_CSV
 import uniprot.models as uniprot
 import eco.models as eco
 
@@ -206,36 +207,88 @@ class TermUniProtEntry(models.Model):
 
     class Meta:
         unique_together = ["term", "uniprot_entry", "qualifier", "eco_term"]
+        indexes = [
+            models.Index(fields=['uniprot_entry_id', 'term_id', 'qualifier', 'eco_term_id']),
+            models.Index(fields=['uniprot_entry_id']),
+        ]
+
+    @classmethod
+    def prepare_csv_file_for_ingestion(cls):
+        terms = set(Term.objects.values_list("id", flat=True))
+
+        with gzip.open(GO_GPA_FILE, "rt") as gpa, open(GO_GPA_CSV, "w", newline='') as dump:
+            writer = csv.writer(dump)
+            writer.writerow(["term_id", "uniprot_entry_id", "qualifier", "eco_term_id"])
+
+            for line in gpa:
+                if line.startswith("UniProtKB"):
+                    words = line.split()
+                    uniprot_id = words[1]
+                    qualifier = words[2]
+                    term = int(words[3].split(":")[1])
+                    if term not in terms:
+                        print("(skipping) term not found", term, line)
+                        # if just a couple of missing terms, is probably a new annotation
+                        continue
+                    eco_term = words[5].split(":")[1].strip()
+                    writer.writerow([term, uniprot_id, qualifier, eco_term])
+
+    @classmethod
+    def ingest_csv_file(cls):
+        with connection.cursor() as cursor:
+            with open(GO_GPA_CSV, 'r') as f:
+                cursor.copy_expert(
+                        "COPY go_termuniprotentry (term_id,uniprot_entry_id,qualifier,eco_term_id)"
+                        " FROM STDIN WITH CSV HEADER", f)
+
+
+
 
     @classmethod
     def create_from_gpa_file(cls):
         """Populates this table by reading from the gpa file"""
-        objs_data = cls.read_gpa_tuples()
-        objs = [cls(term_id=d[0], uniprot_entry_id=d[1],
-                qualifier=d[2], eco_term_id=d[3]) for d in objs_data]
-        print(f"Creating {len(objs)} Uniprot<->Go links")
-        cls.objects.bulk_create(objs, batch_size=100000)
-
-
-    @classmethod
-    def read_gpa_tuples(cls):
-        """Read gpa file and return tuples with data to add"""
-        acs = set(uniprot.Entry.objects.values_list("ac", flat=True))
         terms = set(Term.objects.values_list("id", flat=True))
         info = set()
+        batch_size = 1000000
+        acs = set()
         with gzip.open(GO_GPA_FILE, "rt") as gpa_file:
-            for line in gpa_file:
+            for no, line in enumerate(gpa_file):
                 if line.startswith("UniProtKB"):
                     words = line.split()
                     uniprot_id = words[1]
-                    if uniprot_id in acs:
-                        qualifier = words[2]
-                        term = int(words[3].split(":")[1])
-                        if term not in terms:
-                            print("(skipping) term not found", term, line)
-                            # if just a couple of missing terms, is probably a new annotation
-                            continue
-                        eco_term = words[5].split(":")[1].strip()
-                        info.add((term, uniprot_id, qualifier, eco_term))
-        return info
+                    acs.add(uniprot_id)
+                    qualifier = words[2]
+                    term = int(words[3].split(":")[1])
+                    if term not in terms:
+                        print("(skipping) term not found", term, line)
+                        # if just a couple of missing terms, is probably a new annotation
+                        continue
+                    eco_term = words[5].split(":")[1].strip()
+                    info.add((term, uniprot_id, qualifier, eco_term))
+                if len(info) == batch_size:
+                    print("finished reading batch ", no)
+                    cls.create_objects_from_info(info, acs)
+                    print("start reading another batch")
+                    acs = set()
+                    info = set()
+
+            cls.create_objects_from_info(info, acs)
+
+    @classmethod
+    def create_objects_from_info(cls, info, acs):
+        """wrapper for bulk create to make it easir to call from create_objects"""
+        print("started checking existing for these uniprot acs", len(acs))
+        acs_db = set(uniprot.Entry.objects.filter(ac__in=acs).values_list("ac", flat=True))
+        print("finished reading acs")
+        # existing = {(t[0], t[1], t[2], t[3]) 
+                    # for t in cls.objects.filter(uniprot_entry_id__in=acs_db).values_list(
+                    # "term_id", "uniprot_entry_id", "qualifier", "eco_term_id")}
+        # print(f"existing with {len(acs_db)} acs: {len(existing)}")
+        # print(info.pop(), existing.pop())
+        # to_create = info - existing
+        objs = [cls(term_id=d[0], uniprot_entry_id=d[1],
+                qualifier=d[2], eco_term_id=d[3]) for d in info if d[1] in acs_db]
+        print(f"Creating {len(objs)} Uniprot<->Go links")
+        cls.objects.bulk_create(objs, batch_size=1000, ignore_conflicts=True)
+        print("finished")
 
