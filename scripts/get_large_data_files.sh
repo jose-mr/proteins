@@ -21,7 +21,8 @@ pget -c goa_uniprot_all.gpa.gz
 bye
 EOF
 
-zcat goa_uniprot_all.gpa.gz| cut -f2,3,4,6 | tr '\t' ','| sed 's/GO://g' | sed 's/ECO://g' | grep -v PRO_ | grep -v "!" | sed -E 's/-[0-9]+,/,/g' | sort | uniq | gzip > for_ingestion.csv.gz
+echo "Preparing ingestion file"
+zcat goa_uniprot_all.gpa.gz | tail -n +2 | cut -f2,3,4,6 | tr '\t' ','| sed 's/GO://g' | sed 's/ECO://g' | grep -v PRO_ | grep -v "!" | sed -E 's/-[0-9]+,/,/g' | sort | uniq | gzip > for_ingestion.csv.gz
 
 #echo "Downloading interpro file"
 #mkdir -p $SCRIPT_PATH/../data/interpro

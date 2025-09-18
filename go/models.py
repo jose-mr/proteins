@@ -6,6 +6,8 @@ import gzip
 import re
 from urllib.request import urlretrieve
 import csv
+import subprocess
+import os
 
 # django imports
 from django.db import models, transaction, connection
@@ -234,15 +236,51 @@ class TermUniProtEntry(models.Model):
                     writer.writerow([term, uniprot_id, qualifier, eco_term])
 
     @classmethod
+    @transaction.atomic
     def ingest_csv_file(cls):
+        # this function takes  hours to run
+        # drop constraints to make import faster
+        constraints = []
         with connection.cursor() as cursor:
-            with open(GO_GPA_CSV, 'r') as f:
+            # cursor.execute("""SELECT conname, pg_get_constraintdef(oid)
+                              # FROM pg_constraint WHERE conrelid = 'go_termuniprotentry'::regclass
+                              # AND contype = 'f';""")
+            cursor.execute("""SELECT conname, pg_get_constraintdef(oid)
+                              FROM pg_constraint WHERE conrelid = 'go_termuniprotentry'::regclass
+                              ;""")
+            constraints = cursor.fetchall()
+            for constraint in constraints:
+                print(f"droping constraint {constraint[0]}")
+                cursor.execute(f"ALTER TABLE go_termuniprotentry DROP CONSTRAINT {constraint[0]};")
+
+        # drop indexes
+        indexes = []
+        with connection.cursor() as cursor:
+            cursor.execute("SELECT indexname, indexdef FROM pg_indexes WHERE "
+                           "tablename = 'go_termuniprotentry';")
+            indexes = cursor.fetchall()
+            for index in indexes:
+                print(f"dropping index {index[0]}")
+                cursor.execute(f"DROP INDEX if EXISTS {index[0]};")
+
+        # ingest data
+        with connection.cursor() as cursor:
+            with gzip.open(GO_GPA_CSV, "r") as csv_file:
                 cursor.copy_expert(
-                        "COPY go_termuniprotentry (term_id,uniprot_entry_id,qualifier,eco_term_id)"
-                        " FROM STDIN WITH CSV HEADER", f)
+                    f"COPY go_termuniprotentry (uniprot_entry_id, qualifier, term_id,eco_term_id)"
+                    f" FROM STDIN WITH CSV", file=csv_file)
 
+        # redo indexes
+        with connection.cursor() as cursor:
+            for name, command in indexes:
+                print(f"adding back index {name}")
+                cursor.execute(command);
 
-
+        # redo constraints
+        with connection.cursor() as cursor:
+            for name, definition in constraints:
+                print(f"adding back constraint {name}")
+                cursor.execute(f"ALTER TABLE go_termuniprotentry ADD CONSTRAINT {name} {definition};");
 
     @classmethod
     def create_from_gpa_file(cls):
