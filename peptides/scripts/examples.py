@@ -6,8 +6,12 @@ from taxonomy.models import Taxon
 
 def run():
 
-    peptides = Entry.objects.peptides()
+    peptides = Entry.objects.peptides().values("ac")
     print("Number of Peptides:", peptides.count())
+
+    for p in peptides:
+        print(p)
+    return
 
     # some filters
     # filter by sequence length

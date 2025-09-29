@@ -8,7 +8,7 @@ from Bio import SeqIO, SwissProt
 from Bio.SeqFeature import UnknownPosition
 
 from django.db import models, transaction
-from django.db.models import Q, Count, Func
+from django.db.models import Q, Count, Func, Index
 from django.db.models.functions import Length
 import go.models as go
 import taxonomy.models as taxonomy
@@ -16,6 +16,12 @@ import taxonomy.models as taxonomy
 class Sequence(models.Model):
     seq = models.TextField()
     seq_hash = models.CharField(max_length=32, unique=True, editable=False)
+
+
+    class Meta:
+        indexes = [
+            Index(Length("seq"), name="idx_seq_len")
+        ]
 
 def get_seq_hash(seq):
     return hashlib.md5(seq.encode("utf-8")).hexdigest()
@@ -25,7 +31,7 @@ class EntryQuerySet(models.QuerySet):
     def reviewed(self):
         return self.filter(reviewed=True)
 
-    def peptides(self, max_length=50):
+    def peptides(self, max_length=20):
         qs = self.annotate(seq_length=Length("seq__seq"))
         return qs.filter(seq_length__lte=max_length)
 
@@ -95,6 +101,11 @@ class Entry(models.Model):
     features = models.JSONField()
 
     objects = EntryQuerySet.as_manager()
+
+    class Meta:
+        indexes = [
+            Index(fields=["reviewed"], condition=Q(reviewed=True), name="reviewed_idx"),
+        ]
 
     def __str__(self):
         return self.ac
